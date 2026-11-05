@@ -342,6 +342,44 @@ canvas { width: 100%; height: 100%; display: block; }
 .note-item-date { color: #94a3b8; font-size: 11px; margin-bottom: 4px; }
 .note-item-text { white-space: pre-wrap; color: #334155; }
 
+/* ノートの編集・削除ボタンと入力フォーム */
+.note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  justify-content: flex-end;
+}
+.btn-note-action {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.btn-note-action:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+.btn-note-action.delete:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+.note-edit-area {
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #0d9488;
+  font-size: 12px;
+  margin-top: 6px;
+  box-sizing: border-box;
+  outline: none;
+}
+
 footer {
   text-align: center;
   padding: 30px;
@@ -448,6 +486,13 @@ const LABS = [
     init: initC1Stereo
   },
   {
+    id: "c1_refraction", year: 1, domain: "energy", domainName: "エネルギー",
+    title: "光の反射・屈折・全反射と応用",
+    desc: "半円水槽、直方体ガラス（平行シフト）、光ファイバー、浮き上がるコインの4モードで光の進み方を検証します。",
+    prompt: "直方体ガラスを通った光の向きや、水中のコインが浅く見える理由、光ファイバーで全反射が起きる条件をまとめましょう。",
+    init: initC1Refraction
+  },
+  {
     id: "c1_lens", year: 1, domain: "energy", domainName: "エネルギー",
     title: "凸レンズの光学ベンチ（像の形成）",
     desc: "光源・凸レンズ・スクリーンの距離を調整し、実像と虚像（焦点内外）の結像条件を調べます。",
@@ -476,11 +521,32 @@ const LABS = [
     init: initC1Sound
   },
   {
-    id: "c1_strata", year: 1, domain: "earth", domainName: "地球",
+    id: "c1_sediment", year: 1, domain: "earth", domainName: "地球",
     title: "流水の働きと地層の堆積",
-    desc: "れき・砂・泥の粒径の違いによる沈降速度の差と、層状に重なる地層の形成を調べます。",
-    prompt: "水中で最初に底に沈む粒の大きさ（れき・砂・泥）にはどのような順序がありましたか？",
-    init: initC1Strata
+    desc: "水槽モデルでの粒度分級（れき・砂・泥）、蛇行による侵食と堆積、上流〜下流の石の丸み変化、ボーリング柱状図を検証します。",
+    prompt: "河口から沖合に向かって土砂がどのように沈むか、また川が曲がっている場所の内側と外側で流れの速さや侵食・堆積はどう違いますか？",
+    init: initC1Sediment
+  },
+  {
+    id: "c1_metal", year: 1, domain: "matter", domainName: "物質",
+    title: "金属と非金属の見分け方",
+    desc: "金属光沢（みがく）、電気伝導性（テスター）、延性・展性（たたく）、磁性を調べ、金属に共通する性質を検証します。",
+    prompt: "鉄・銅・アルミニウムと、プラスチックや木片の違いは何でしたか？金属すべてに共通する3大性質をまとめましょう。",
+    init: initC1Metal
+  },
+  {
+    id: "c1_burner", year: 1, domain: "matter", domainName: "物質",
+    title: "ガスバーナーの使い方と炎の調節",
+    desc: "元栓・コックの開閉、マッチ点火、ガス調節ねじ・空気調節ねじの正しい操作手順と安全な青い炎への調節を体験します。",
+    prompt: "火をつけるときと消すときで、ガス調節ねじと空気調節ねじを回す順番や向きはどう違いましたか？",
+    init: initC1Burner
+  },
+  {
+    id: "c1_earthquake", year: 1, domain: "earth", domainName: "地球",
+    title: "地震の波と初期微動継続時間",
+    desc: "地下の震源から広がるP波・S波の速度差、2地点での地震計記録（初期微動と主要動）、震源距離と初期微動継続時間の比例関係を完全検証します。",
+    prompt: "P波とS波の違いは何ですか？また、震源から遠い地点ほど初期微動が続く時間が長くなるのはなぜですか？",
+    init: initC1Earthquake
   },
 
   // === 中2 ===
@@ -489,7 +555,7 @@ const LABS = [
     title: "植物細胞・動物細胞と細胞小器官の観察",
     desc: "タマネギ表皮（植物）と頬の内側（動物）を染色し、核・細胞壁・葉緑体・液胞の有無を比較します。",
     prompt: "動物細胞と植物細胞の両方に共通して見られるつくり（核・細胞質・細胞膜）と、植物にだけ見られるつくりの違いは何ですか？",
-    init: initC2CellOrganelles
+    init: initC2Cell
   },
   {
     id: "c2_heat", year: 2, domain: "matter", domainName: "物質",
@@ -680,6 +746,7 @@ function backToList() {
   window.scrollTo(0, 0);
 }
 
+// --- ノート管理機能 ---
 function saveCurrentNote() {
   const text = document.getElementById('notebookInput').value.trim();
   if (!text || !activeLabId) return;
@@ -702,22 +769,80 @@ function loadLabNotes(labId) {
   const container = document.getElementById('currentLabNotesList');
   container.innerHTML = '';
   const notes = JSON.parse(localStorage.getItem('sciencelab_notes') || '[]');
-  const labNotes = notes.filter(n => n.labId === labId);
+  
+  const labNotesWithIndex = notes
+    .map((note, index) => ({ ...note, originalIndex: index }))
+    .filter(n => n.labId === labId);
 
-  if (labNotes.length === 0) {
+  if (labNotesWithIndex.length === 0) {
     container.innerHTML = '<div style="color:#94a3b8; padding:8px;">まだこの実験のメモはありません。</div>';
     return;
   }
 
-  labNotes.forEach(n => {
+  labNotesWithIndex.forEach(n => {
     const item = document.createElement('div');
     item.className = 'note-item';
+    item.id = `note-item-${n.originalIndex}`;
     item.innerHTML = `
       <div class="note-item-date">${n.date}</div>
-      <div class="note-item-text">${escapeHtml(n.text)}</div>
+      <div class="note-item-text" id="note-text-${n.originalIndex}">${escapeHtml(n.text)}</div>
+      <div class="note-actions" id="note-actions-${n.originalIndex}">
+        <button class="btn-note-action" onclick="startEditNote(${n.originalIndex})">編集</button>
+        <button class="btn-note-action delete" onclick="deleteNote(${n.originalIndex})">削除</button>
+      </div>
     `;
     container.appendChild(item);
   });
+}
+
+function startEditNote(index) {
+  const notes = JSON.parse(localStorage.getItem('sciencelab_notes') || '[]');
+  const currentText = notes[index].text;
+  
+  const textDiv = document.getElementById(`note-text-${index}`);
+  const actionsDiv = document.getElementById(`note-actions-${index}`);
+
+  textDiv.innerHTML = `<textarea class="note-edit-area" id="edit-input-${index}">${escapeHtml(currentText)}</textarea>`;
+  actionsDiv.innerHTML = `
+    <button class="btn-note-action" style="background:#0d9488; color:white; border-color:#0d9488;" onclick="saveEditNote(${index})">保存</button>
+    <button class="btn-note-action" onclick="cancelEditNote(${index})">キャンセル</button>
+  `;
+}
+
+function saveEditNote(index) {
+  const newText = document.getElementById(`edit-input-${index}`).value.trim();
+  if (!newText) {
+    alert("ノートの内容を入力してください（削除したい場合は削除ボタンを押してください）。");
+    return;
+  }
+
+  const notes = JSON.parse(localStorage.getItem('sciencelab_notes') || '[]');
+  notes[index].text = newText;
+  notes[index].date = new Date().toLocaleString('ja-JP') + " (編集済)";
+  localStorage.setItem('sciencelab_notes', JSON.stringify(notes));
+
+  if (activeLabId) {
+    loadLabNotes(activeLabId);
+  }
+}
+
+function cancelEditNote(index) {
+  if (activeLabId) {
+    loadLabNotes(activeLabId);
+  }
+}
+
+function deleteNote(index) {
+  if (!confirm("このメモを削除してもよろしいですか？")) return;
+
+  const notes = JSON.parse(localStorage.getItem('sciencelab_notes') || '[]');
+  notes.splice(index, 1);
+  localStorage.setItem('sciencelab_notes', JSON.stringify(notes));
+
+  if (activeLabId) {
+    loadLabNotes(activeLabId);
+  }
+  updateTotalNotesCount();
 }
 
 function updateTotalNotesCount() {
@@ -735,7 +860,8 @@ function showAllNotesModal() {
   notes.slice(0, 10).forEach((n, i) => {
     summary += `${i+1}. [${n.labTitle}] (${n.date})\n${n.text}\n\n`;
   });
-  if (notes.length > 10) summary += `...他 ${notes.length - 10} 件`;
+  if (notes.length > 10) summary += `...他 ${notes.length - 10} 件\n\n`;
+  summary += `※メモの編集や削除は、各実験室内のノートエリアから行えます。`;
   alert(summary);
 }
 
@@ -755,12 +881,30 @@ function setStatus(text, isWarning=false) {
 // 実験モジュール実装
 // ==========================================
 
-// 【新規】ルーペの使い方 (中1・生命)
+
+
+
+
+
+
+
+
+
+
+// 【実写画像・太陽警告対応】ルーペの使い方 (中1・生命)
 function initC1Loupe(canvas) {
   const ctx = canvas.getContext('2d');
-  let targetType = 'movable'; // 'movable'(持てる花) or 'fixed'(動かせない樹木)
+  let targetType = 'movable'; // 'movable' または 'fixed'
   let distance = 25; // 最適値: 65前後
   let animId;
+
+  // 実写画像の読み込み
+  const images = {
+    movable: new Image(),
+    fixed: new Image()
+  };
+  images.movable.src = 'dandelion.jpeg';
+  images.fixed.src = 'bark.jpg';
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
@@ -781,20 +925,61 @@ function initC1Loupe(canvas) {
     </div>
   `;
 
-  document.getElementById('bMove').onclick = () => {
-    targetType = 'movable';
-    updateControls();
-  };
-  document.getElementById('bFixed').onclick = () => {
-    targetType = 'fixed';
-    updateControls();
-  };
+  document.getElementById('bMove').onclick = () => { targetType = 'movable'; updateControls(); };
+  document.getElementById('bFixed').onclick = () => { targetType = 'fixed'; updateControls(); };
   document.getElementById('distRange').oninput = (e) => {
     distance = parseInt(e.target.value);
     document.getElementById('distVal').textContent = `${distance} mm`;
   };
+
+  // 太陽を見る警告モーダル（クリックで非表示）
   document.getElementById('bSun').onclick = () => {
     setStatus("【極めて危険！】ルーペで太陽を絶対に見ないでください！失明する危険があります！", true);
+    
+    let modal = document.getElementById('sunWarningModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'sunWarningModal';
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100vw';
+      modal.style.height = '100vh';
+      modal.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+      modal.style.zIndex = '9999';
+      modal.style.display = 'flex';
+      modal.style.flexDirection = 'column';
+      modal.style.justifyContent = 'center';
+      modal.style.alignItems = 'center';
+      modal.style.cursor = 'pointer';
+
+      const img = document.createElement('img');
+      img.src = 'mitaradame.jpg';
+      img.alt = '太陽を見てはいけません';
+      img.style.maxWidth = '90%';
+      img.style.maxHeight = '80%';
+      img.style.borderRadius = '12px';
+      img.style.boxShadow = '0 0 25px rgba(239, 68, 68, 0.8)';
+      img.style.display = 'block';
+
+      const tip = document.createElement('p');
+      tip.textContent = 'クリックすると閉じます';
+      tip.style.color = '#ffffff';
+      tip.style.marginTop = '15px';
+      tip.style.fontSize = '14px';
+      tip.style.fontWeight = 'bold';
+
+      modal.appendChild(img);
+      modal.appendChild(tip);
+
+      modal.onclick = () => {
+        modal.style.display = 'none';
+      };
+
+      document.body.appendChild(modal);
+    } else {
+      modal.style.display = 'flex';
+    }
   };
 
   function updateControls() {
@@ -814,16 +999,15 @@ function initC1Loupe(canvas) {
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, w, h);
 
-    const cx = w/2, cy = h/2, r = Math.min(w, h)*0.38;
+    const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.38;
 
-    // ルーペの枠・レンズ視野
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.clip();
 
-    ctx.fillStyle = targetType==='movable' ? "#fefce8" : "#f1f5f9";
-    ctx.fillRect(cx-r, cy-r, r*2, r*2);
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
 
     const blurDist = Math.abs(distance - 65);
     const blur = Math.max(0, blurDist * 0.4);
@@ -840,76 +1024,83 @@ function initC1Loupe(canvas) {
 
     ctx.filter = `blur(${blur}px)`;
 
-    if (targetType === 'movable') {
-      // タンポポの花弁と花粉
-      ctx.fillStyle = "#eab308";
-      for (let i=0; i<18; i++) {
-        const ang = i * (Math.PI*2/18);
-        ctx.beginPath();
-        ctx.ellipse(cx + Math.cos(ang)*50, cy + Math.sin(ang)*50, 45, 12, ang, 0, Math.PI*2);
-        ctx.fill();
-      }
-      ctx.fillStyle = "#ca8a04";
-      ctx.beginPath();
-      ctx.arc(cx, cy, 32, 0, Math.PI*2);
-      ctx.fill();
+    const img = images[targetType];
+    if (img.complete && img.naturalWidth !== 0) {
+      const imgSize = r * 2.2;
+      ctx.drawImage(img, cx - imgSize / 2, cy - imgSize / 2, imgSize, imgSize);
     } else {
-      // 樹皮の筋
-      ctx.strokeStyle = "#78350f";
-      ctx.lineWidth = 14;
-      for (let x = cx - r; x < cx + r; x += 36) {
-        ctx.beginPath();
-        ctx.moveTo(x, cy - r);
-        ctx.lineTo(x + 10, cy + r);
-        ctx.stroke();
-      }
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("画像を読み込み中、またはファイルがありません", cx, cy);
     }
 
     ctx.filter = "none";
     ctx.restore();
 
-    // ルーペの銀枠と持ち手
     ctx.strokeStyle = "#94a3b8";
     ctx.lineWidth = 16;
     ctx.beginPath();
-    ctx.arc(cx, cy, r+8, 0, Math.PI*2);
+    ctx.arc(cx, cy, r + 8, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 持ち手
     ctx.strokeStyle = "#334155";
     ctx.lineWidth = 22;
     ctx.beginPath();
-    ctx.moveTo(cx + r*0.7, cy + r*0.7);
-    ctx.lineTo(cx + r*1.3, cy + r*1.3);
+    ctx.moveTo(cx + r * 0.7, cy + r * 0.7);
+    ctx.lineTo(cx + r * 1.3, cy + r * 1.3);
     ctx.stroke();
 
     animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('sunWarningModal');
+      if (modal) modal.remove();
+    }
+  };
 }
 
-// 【新規】双眼実体顕微鏡の使い方 (中1・生命)
+
+
+
+
+
+
+// 【教科書準拠＋実写ソメイヨシノ対応版】双眼実体顕微鏡の使い方 (中1・生命)
 function initC1Stereo(canvas) {
   const ctx = canvas.getContext('2d');
-  let eyeWidth = 40; // 眼幅調節 (最適値: 50)
-  let coarseFocus = 30; // 粗動ねじ (最適値: 60)
-  let diopter = 10; // 視度調節リング(左目) (最適値: 50)
+  
+  // パラメータ初期値
+  let eyeWidth = 35;     // 1. 眼幅調節 (最適値: 50%)
+  let coarseFocus = 30; // 1. 粗動ねじ (両目でおよそ合わせる / 最適値: 60%)
+  let fineFocus = 20;   // 2. 微動ねじ (右目でのぞいて微調整 / 最適値: 55%)
+  let diopter = 20;     // 3. 視度調節リング (左目でのぞいて調整 / 最適値: 50%)
   let animId;
+
+  // 実写画像の読み込み
+  const flowerImg = new Image();
+  flowerImg.src = 'someiyosino.jpg';
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
     <div class="ctrl-group">
-      <label>1. 眼幅調節 (左右の視野を1つに合わせる): <span id="ewVal" class="ctrl-val">${eyeWidth}%</span></label>
-      <input type="range" id="ewRange" min="20" max="80" value="${eyeWidth}">
+      <label>①-A. 眼幅調節 (視野を1つに重ねる): <span id="ewVal" class="ctrl-val">${eyeWidth}%</span></label>
+      <input type="range" id="ewRange" min="15" max="85" value="${eyeWidth}">
     </div>
     <div class="ctrl-group">
-      <label>2. 粗動ねじ (右目でピント合わせ): <span id="cfVal" class="ctrl-val">${coarseFocus}%</span></label>
+      <label>①-B. 粗動ねじ (両目でおよそのピント): <span id="cfVal" class="ctrl-val">${coarseFocus}%</span></label>
       <input type="range" id="cfRange" min="10" max="90" value="${coarseFocus}">
     </div>
     <div class="ctrl-group">
-      <label>3. 視度調節リング (左目の視力差を合わせる): <span id="dpVal" class="ctrl-val">${diopter}%</span></label>
+      <label>②. 微動ねじ (右目でのぞきピントを合わせる): <span id="ffVal" class="ctrl-val">${fineFocus}%</span></label>
+      <input type="range" id="ffRange" min="10" max="90" value="${fineFocus}">
+    </div>
+    <div class="ctrl-group">
+      <label>③. 視度調節リング (左目でのぞき視力差を合わせる): <span id="dpVal" class="ctrl-val">${diopter}%</span></label>
       <input type="range" id="dpRange" min="10" max="90" value="${diopter}">
     </div>
   `;
@@ -922,6 +1113,10 @@ function initC1Stereo(canvas) {
     coarseFocus = parseInt(e.target.value);
     document.getElementById('cfVal').textContent = `${coarseFocus}%`;
   };
+  document.getElementById('ffRange').oninput = (e) => {
+    fineFocus = parseInt(e.target.value);
+    document.getElementById('ffVal').textContent = `${fineFocus}%`;
+  };
   document.getElementById('dpRange').oninput = (e) => {
     diopter = parseInt(e.target.value);
     document.getElementById('dpVal').textContent = `${diopter}%`;
@@ -932,76 +1127,91 @@ function initC1Stereo(canvas) {
     ctx.fillStyle = "#020617";
     ctx.fillRect(0, 0, w, h);
 
-    const cy = h/2, cx = w/2;
-    const r = Math.min(w, h)*0.36;
+    const cy = h / 2, cx = w / 2;
+    const r = Math.min(w, h) * 0.38;
 
-    // 眼幅のずれ
-    const eyeOffset = (eyeWidth - 50) * 1.5;
+    // 眼幅調節による左右視野のオフセット（50%で完全に一致）
+    const eyeOffset = (eyeWidth - 50) * 1.8;
 
-    // ステータス判定
+    // ピント判定の計算
+    // 粗動ねじ(目標60)によるベースのズレ
+    const coarseDiff = Math.abs(coarseFocus - 60);
+    // 右目のボケ具合: 粗動ねじの粗さ ＋ 微動ねじ(目標55)のズレ
+    const rightBlur = coarseDiff * 0.4 + Math.abs(fineFocus - 55) * 0.5;
+    // 左目のボケ具合: 粗動ねじの粗さ ＋ 視度調節リング(目標50)のズレ
+    const leftBlur = coarseDiff * 0.4 + Math.abs(diopter - 50) * 0.5;
+
+    // ステータスと指導メッセージ
     const isOverlap = Math.abs(eyeWidth - 50) < 5;
-    const isRightSharp = Math.abs(coarseFocus - 60) < 6;
-    const isLeftSharp = Math.abs(diopter - 50) < 6;
+    const isCoarseOk = coarseDiff < 10;
+    const isRightSharp = rightBlur < 4;
+    const isLeftSharp = leftBlur < 4;
 
     if (!isOverlap) {
-      setStatus("【手順1: 眼幅調節】鏡筒を両手で持ち、左右の視野が重なって1つの円に見える位置（50%）に調整しましょう。", true);
+      setStatus("【手順①-A: 眼幅調節】鏡筒を両手で持ち、左右の視野が重なって1つに見える位置（50%）に調整しましょう。", true);
+    } else if (!isCoarseOk) {
+      setStatus("【手順①-B: 粗動ねじ】両目でのぞきながら粗動ねじで鏡筒を上下させ、およそのピントを合わせましょう（約60%）。", true);
     } else if (!isRightSharp) {
-      setStatus("【手順2: 粗動ねじ】右目で覗きながら粗動ねじを回し、ピントを合わせましょう（約60%）。", true);
+      setStatus("【手順②: 微動ねじ】次に『右目だけ』でのぞきながら微動ねじを回し、ピントをぴったり合わせましょう（約55%）。", true);
     } else if (!isLeftSharp) {
-      setStatus("【手順3: 視度調節】左目で覗き、鏡筒の視度調節リングを回して左右の視力差を合わせましょう（約50%）。", true);
+      setStatus("【手順③: 視度調節リング】最後に『左目だけ』でのぞきながら視度調節リングを回してピントを合わせましょう（約50%）。", true);
     } else {
-      setStatus("【調整完了！】両眼で立体感（3D）を持った鮮明な像が観察できています！実物は上下左右そのままに見えます。");
+      setStatus("【調整完了！】左右の視野が合致し、ソメイヨシノの花粉が立体的にくっきりと観察できています！実物は上下左右そのまま見えます。");
     }
 
-    // 左目視野
+    // --- 左目視野の描画 ---
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx - eyeOffset, cy, r, 0, Math.PI*2);
+    ctx.arc(cx - eyeOffset, cy, r, 0, Math.PI * 2);
     ctx.clip();
-    drawStereoObject(cx - eyeOffset, cy, Math.abs(diopter-50)*0.5 + Math.abs(coarseFocus-60)*0.2);
+    drawStereoImage(cx - eyeOffset, cy, r, leftBlur, -6); // 視差(-6px)
     ctx.restore();
 
-    // 右目視野
+    // --- 右目視野の描画 ---
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx + eyeOffset, cy, r, 0, Math.PI*2);
+    ctx.arc(cx + eyeOffset, cy, r, 0, Math.PI * 2);
     ctx.clip();
-    drawStereoObject(cx + eyeOffset, cy, Math.abs(coarseFocus-60)*0.4);
+    drawStereoImage(cx + eyeOffset, cy, r, rightBlur, 6);  // 視差(+6px)
     ctx.restore();
 
-    // 外枠
+    // 視野の金属枠
     ctx.strokeStyle = "#475569";
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 12;
     ctx.beginPath();
-    ctx.arc(cx - eyeOffset, cy, r, 0, Math.PI*2);
+    ctx.arc(cx - eyeOffset, cy, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(cx + eyeOffset, cy, r, 0, Math.PI*2);
+    ctx.arc(cx + eyeOffset, cy, r, 0, Math.PI * 2);
     ctx.stroke();
 
     animId = requestAnimationFrame(render);
   }
 
-  function drawStereoObject(ox, oy, blur) {
-    ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(ox - 200, oy - 200, 400, 400);
+  // ソメイヨシノ写真の描画（視差・ボケ適用）
+  function drawStereoImage(ox, oy, r, blurVal, parallaxOffset) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(ox - r - 20, oy - r - 20, (r + 20) * 2, (r + 20) * 2);
 
-    ctx.filter = `blur(${Math.max(0, blur)}px)`;
-    // アリなどの立体的な観察物
-    ctx.fillStyle = "#1e293b";
-    ctx.beginPath();
-    ctx.ellipse(ox, oy, 40, 24, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(ox + 45, oy, 18, 0, Math.PI*2);
-    ctx.fill();
-    // 触角・足
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(ox + 55, oy - 10); ctx.lineTo(ox + 85, oy - 25);
-    ctx.moveTo(ox + 55, oy + 10); ctx.lineTo(ox + 85, oy + 25);
-    ctx.stroke();
+    ctx.filter = `blur(${Math.max(0, blurVal)}px)`;
+
+    if (flowerImg.complete && flowerImg.naturalWidth !== 0) {
+      const imgSize = r * 2.3;
+      // 微小な横ズレ(parallaxOffset)を加えることで、両眼合致時の立体感（3D視差）を表現
+      ctx.drawImage(
+        flowerImg,
+        ox - imgSize / 2 + parallaxOffset,
+        oy - imgSize / 2,
+        imgSize,
+        imgSize
+      );
+    } else {
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("someiyosino.jpg を読み込み中...", ox, oy);
+    }
+
     ctx.filter = "none";
   }
 
@@ -1009,147 +1219,250 @@ function initC1Stereo(canvas) {
   return { destroy: () => cancelAnimationFrame(animId) };
 }
 
-// 【新規】細胞小器官の観察（中2・生命）
-function initC2CellOrganelles(canvas) {
+
+
+
+
+
+
+
+
+
+
+// ==========================================
+// 【完全修正版】金属と非金属の見分け方 (中1・物質)
+// ==========================================
+function initC1Metal(canvas) {
   const ctx = canvas.getContext('2d');
-  let cellType = 'plant'; // 'plant'(タマネギ表皮) or 'animal'(頬の内側上皮)
-  let stained = true; // 酢酸オルセイン染色
-  let selectedOrganelle = null; // 'nucleus', 'wall', 'chloroplast', 'vacuole', 'membrane'
+  let sample = 'iron';
+  let polished = false;
+  let testType = 'none'; // 'none', 'polish', 'circuit', 'hammer', 'magnet', 'heat', 'density'
   let animId;
+
+  const sampleData = {
+    iron:    { name: "鉄 (クギ)",     isMetal: true,  color: "#64748b", polishColor: "#cbd5e1", magnet: true,  mass: 39.4, vol: 5.0, density: 7.87 },
+    copper:  { name: "銅 (銅板)",     isMetal: true,  color: "#b45309", polishColor: "#f97316", magnet: false, mass: 44.8, vol: 5.0, density: 8.96 },
+    alumi:   { name: "アルミニウム", isMetal: true,  color: "#94a3b8", polishColor: "#f1f5f9", magnet: false, mass: 13.5, vol: 5.0, density: 2.70 },
+    wood:    { name: "木片",         isMetal: false, color: "#854d0e", polishColor: "#854d0e", magnet: false, mass: 3.0,  vol: 5.0, density: 0.60 },
+    plastic: { name: "プラスチック",   isMetal: false, color: "#0284c7", polishColor: "#0284c7", magnet: false, mass: 4.6,  vol: 5.0, density: 0.92 }
+  };
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
     <div class="ctrl-group">
-      <label>観察する細胞の切り替え:</label>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-action ${cellType==='plant'?'':'secondary'}" id="bPlant">植物細胞 (タマネギ表皮)</button>
-        <button class="btn-action ${cellType==='animal'?'':'secondary'}" id="bAnimal">動物細胞 (ヒトの頬内側)</button>
-      </div>
-    </div>
-    <div class="ctrl-group">
-      <label>染色液 (酢酸オルセイン/酢酸カーミン):</label>
-      <button class="btn-action ${stained?'':'secondary'}" id="bStain">${stained?'染色中 (核が赤染)':'無染色 (透明)'}</button>
-    </div>
-    <div class="ctrl-group">
-      <label>詳しく調べる細胞小器官:</label>
-      <select id="organelleSelect" class="search-input" style="padding:6px;">
-        <option value="none">全体を観察</option>
-        <option value="nucleus">核 (遺伝情報の保存・指令)</option>
-        <option value="membrane">細胞膜 (物質の出入りの調整)</option>
-        <option value="wall">細胞壁 (植物のみ・形状保持)</option>
-        <option value="chloroplast">葉緑体 (植物のみ・光合成)</option>
-        <option value="vacuole">液胞 (植物のみ・物質の貯蔵)</option>
+      <label>調べる物質:</label>
+      <select id="sampleSelect" class="search-input" style="padding:6px;">
+        <option value="iron">鉄 (くぎ)</option>
+        <option value="copper">銅 (銅板)</option>
+        <option value="alumi">アルミニウム板</option>
+        <option value="wood">木片</option>
+        <option value="plastic">プラスチック片</option>
       </select>
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1;">
+      <label>実験操作（金属の性質を確かめる）:</label>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        <button class="btn-action secondary" id="bPolish">みがく (金属光沢)</button>
+        <button class="btn-action secondary" id="bCircuit">豆電球につなぐ (電気伝導性)</button>
+        <button class="btn-action secondary" id="bHammer">金づちでたたく (展性・延性)</button>
+        <button class="btn-action secondary" id="bHeat">お湯につける (熱伝導性) ♨️</button>
+        <button class="btn-action secondary" id="bMagnet">磁石を近づける (磁性)</button>
+        <button class="btn-action secondary" id="bDensity">密度を測定する (てんびん・メスシリンダー) ⚖️</button>
+      </div>
     </div>
   `;
 
-  document.getElementById('bPlant').onclick = () => {
-    cellType = 'plant';
-    updateView();
-  };
-  document.getElementById('bAnimal').onclick = () => {
-    cellType = 'animal';
-    updateView();
-  };
-  document.getElementById('bStain').onclick = () => {
-    stained = !stained;
-    updateView();
-  };
-  document.getElementById('organelleSelect').onchange = (e) => {
-    selectedOrganelle = e.target.value === 'none' ? null : e.target.value;
-    updateView();
+  document.getElementById('sampleSelect').onchange = (e) => {
+    sample = e.target.value;
+    polished = false;
+    testType = 'none';
+    setStatus(`物質を「${sampleData[sample].name}」にセットしました。実験を選んでみましょう。`);
   };
 
-  function updateView() {
-    document.getElementById('bPlant').className = `btn-action ${cellType==='plant'?'':'secondary'}`;
-    document.getElementById('bAnimal').className = `btn-action ${cellType==='animal'?'':'secondary'}`;
-    document.getElementById('bStain').className = `btn-action ${stained?'':'secondary'}`;
-    document.getElementById('bStain').textContent = stained ? '染色中 (核が赤染)' : '無染色 (透明)';
+  document.getElementById('bPolish').onclick = () => {
+    polished = true;
+    testType = 'polish';
+    const s = sampleData[sample];
+    setStatus(s.isMetal ? `【金属光沢】表面をみがくと特有のピカピカした輝きが現れました！` : `表面をみがいても削れるだけで、特有の金属光沢は出ません。`);
+  };
 
-    if (selectedOrganelle === 'nucleus') {
-      setStatus("【核】1つの細胞に通常1個存在。酢酸オルセインや酢酸カーミン液で赤く染まり、遺伝情報のDNAを含みます。");
-    } else if (selectedOrganelle === 'wall') {
-      if (cellType === 'animal') setStatus("【細胞壁なし】動物細胞には細胞壁がなく、柔軟な細胞膜のみで覆われているため形が不規則です。", true);
-      else setStatus("【細胞壁】植物細胞の外側を覆う丈夫なしきり。セルロースが主成分で、植物の体をしっかりと支えます。");
-    } else if (selectedOrganelle === 'chloroplast') {
-      if (cellType === 'animal') setStatus("【葉緑体なし】動物細胞は光合成を行わないため、葉緑体は存在しません。", true);
-      else setStatus("【葉緑体】光合成を行ってデンプンをつくる緑色の小器官（タマネギの地下の鱗茎には少ないですが葉肉細胞には多数）。");
-    } else if (selectedOrganelle === 'vacuole') {
-      if (cellType === 'animal') setStatus("【液胞なし/未発達】成長した大きな液胞は植物細胞に特有です。", true);
-      else setStatus("【液胞】細胞液で満たされた袋。不要物や糖・色素（アントシアン等）の貯蔵を行います。");
-    } else if (selectedOrganelle === 'membrane') {
-      setStatus("【細胞膜】細胞質を包む薄い膜。細胞内外への物質の出入りを選択的に調節しています（動植物共通）。");
+  document.getElementById('bCircuit').onclick = () => {
+    testType = 'circuit';
+    const s = sampleData[sample];
+    setStatus(s.isMetal ? `【電気伝導性】電流がよく流れ、豆電球が明るく点灯しました！` : `電気を通さないため、豆電球はつきません。`);
+  };
+
+  document.getElementById('bHammer').onclick = () => {
+    testType = 'hammer';
+    const s = sampleData[sample];
+    setStatus(s.isMetal ? `【展性・延性】たたいても砕けず、薄く広がりました（たたくと広がる展性・引っぱると伸びる延性）。` : `強い衝撃で割れるかへこむだけで、広がる性質はありません。`);
+  };
+
+  document.getElementById('bHeat').onclick = () => {
+    testType = 'heat';
+    const s = sampleData[sample];
+    setStatus(s.isMetal ? `【熱伝導性】熱湯につけると、熱が素早く伝わって反対側の端まで一気に熱くなりました！` : `熱の伝わりが遅く、反対側はほとんど熱くなりません。`);
+  };
+
+  document.getElementById('bMagnet').onclick = () => {
+    testType = 'magnet';
+    const s = sampleData[sample];
+    if (s.magnet) {
+      setStatus(`【磁性】磁石に強く引き寄せられました！（※磁石につくのは鉄などごく一部です）`);
+    } else if (s.isMetal) {
+      setStatus(`【磁性】金属ですが磁石につきません。「磁石につく」は金属共通の性質ではない点に注意！`);
     } else {
-      if (cellType === 'plant') {
-        setStatus("【植物細胞】規則正しいレンガ状に並んでいます。共通する『核・細胞質・細胞膜』に加え、『細胞壁・液胞・葉緑体』を持ちます。");
-      } else {
-        setStatus("【動物細胞】輪郭が丸く不規則。植物のような細胞壁がないため形が柔らかく、核と細胞膜、細胞質から構成されます。");
-      }
+      setStatus(`磁石には反応しません。`);
     }
-  }
-  updateView();
+  };
+
+  document.getElementById('bDensity').onclick = () => {
+    if (testType === 'density') {
+      testType = 'none';
+      setStatus(`通常の観察画面に戻しました。他の実験を選んでみましょう。`);
+    } else {
+      testType = 'density';
+      const s = sampleData[sample];
+      setStatus(`【密度測定】質量 ${s.mass}g ÷ 体積 ${s.vol}cm³ ＝ 密度 ${s.density.toFixed(2)} g/cm³。金属は非金属（プラスチックや木）と比べて密度が非常に大きいです。（もう一度押すと通常画面に戻ります）`);
+    }
+  };
 
   function render() {
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, w, h);
 
-    const cx = w/2, cy = h/2;
+    const cx = w / 2, cy = h / 2;
+    const s = sampleData[sample];
 
-    if (cellType === 'plant') {
-      // 植物細胞（レンガ状）
-      const cw = 140, ch = 80;
-      for (let i=-2; i<=2; i++) {
-        for (let j=-2; j<=2; j++) {
-          const x = cx + i*cw, y = cy + j*ch;
-          // 細胞壁
-          ctx.strokeStyle = (selectedOrganelle==='wall') ? "#facc15" : "#34d399";
-          ctx.lineWidth = (selectedOrganelle==='wall') ? 6 : 3;
-          ctx.strokeRect(x - cw/2, y - ch/2, cw-4, ch-4);
+    // ==========================================
+    // 密度測定画面
+    // ==========================================
+    if (testType === 'density') {
+      // 電子てんびん
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(cx - 150, cy + 30, 110, 35);
+      ctx.strokeStyle = "#475569";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - 150, cy + 30, 110, 35);
 
-          // 細胞質
-          ctx.fillStyle = "rgba(167, 243, 208, 0.25)";
-          ctx.fillRect(x - cw/2 + 3, y - ch/2 + 3, cw-10, ch-10);
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${s.mass} g`, cx - 95, cy + 54);
 
-          // 液胞
-          ctx.fillStyle = (selectedOrganelle==='vacuole') ? "rgba(56, 189, 248, 0.6)" : "rgba(224, 242, 254, 0.2)";
-          ctx.beginPath();
-          ctx.ellipse(x, y, cw*0.35, ch*0.3, 0, 0, Math.PI*2);
-          ctx.fill();
+      // てんびん上のサンプル
+      ctx.fillStyle = s.color;
+      ctx.fillRect(cx - 110, cy + 10, 30, 20);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - 110, cy + 10, 30, 20);
 
-          // 核
-          const nucColor = stained ? "#ef4444" : "rgba(100, 116, 139, 0.4)";
-          ctx.fillStyle = (selectedOrganelle==='nucleus') ? "#facc15" : nucColor;
-          ctx.beginPath();
-          ctx.arc(x + 25, y - 12, (selectedOrganelle==='nucleus')?12:9, 0, Math.PI*2);
-          ctx.fill();
-        }
-      }
-    } else {
-      // 動物細胞（不規則・丸い）
-      const cells = [
-        {x: cx - 60, y: cy - 30, r: 55},
-        {x: cx + 70, y: cy + 10, r: 65},
-        {x: cx - 20, y: cy + 70, r: 50}
-      ];
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "11px sans-serif";
+      ctx.fillText("電子てんびん (質量)", cx - 95, cy + 85);
 
-      cells.forEach(c => {
-        // 細胞膜
-        ctx.strokeStyle = (selectedOrganelle==='membrane') ? "#facc15" : "#cbd5e1";
-        ctx.lineWidth = (selectedOrganelle==='membrane') ? 5 : 2;
-        ctx.fillStyle = "rgba(254, 215, 170, 0.25)";
+      // メスシリンダー
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx + 40, cy - 80, 50, 140);
+
+      // 水 + 沈んだサンプルの体積
+      ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
+      ctx.fillRect(cx + 42, cy - 20, 46, 78);
+
+      // シリンダー内のサンプル
+      ctx.fillStyle = s.color;
+      ctx.fillRect(cx + 55, cy + 35, 20, 20);
+
+      // 目盛り線
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 1;
+      for (let y = cy - 70; y < cy + 50; y += 15) {
         ctx.beginPath();
-        ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-        ctx.fill();
+        ctx.moveTo(cx + 80, y);
+        ctx.lineTo(cx + 90, y);
         ctx.stroke();
+      }
 
-        // 核
-        const nucColor = stained ? "#dc2626" : "rgba(148, 163, 184, 0.4)";
-        ctx.fillStyle = (selectedOrganelle==='nucleus') ? "#facc15" : nucColor;
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "12px sans-serif";
+      ctx.fillText(`体積増加: ${s.vol} cm³`, cx + 65, cy + 85);
+
+      // 密度計算式
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText(`密度 ＝ ${s.mass}g ÷ ${s.vol}cm³ ＝ ${s.density.toFixed(2)} g/cm³`, cx, cy - 100);
+
+      // ループを継続
+      animId = requestAnimationFrame(render);
+      return;
+    }
+
+    // ==========================================
+    // 通常実験画面
+    // ==========================================
+    ctx.fillStyle = polished ? s.polishColor : s.color;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = polished && s.isMetal ? 3 : 1;
+
+    let sx = cx - 60, sy = cy - 25, sw = 120, sh = 50;
+    if (testType === 'hammer' && s.isMetal) {
+      sx = cx - 80; sy = cy - 15; sw = 160; sh = 30; // たたかれて薄く広がる
+    }
+
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeRect(sx, sy, sw, sh);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 15px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(s.name + (polished && s.isMetal ? " (金属光沢)" : ""), cx, cy + 5);
+
+    // 回路テスト
+    if (testType === 'circuit') {
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(sx, cy); ctx.lineTo(sx - 40, cy); ctx.lineTo(sx - 40, cy - 70); ctx.lineTo(cx, cy - 70);
+      ctx.moveTo(sx + sw, cy); ctx.lineTo(sx + sw + 40, cy); ctx.lineTo(sx + sw + 40, cy - 70); ctx.lineTo(cx + 30, cy - 70);
+      ctx.stroke();
+
+      ctx.fillStyle = s.isMetal ? "#facc15" : "#475569";
+      ctx.beginPath();
+      ctx.arc(cx + 15, cy - 70, 15, 0, Math.PI * 2);
+      ctx.fill();
+      if (s.isMetal) {
+        ctx.strokeStyle = "#fef08a";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+    } 
+    // 熱伝導テスト
+    else if (testType === 'heat') {
+      ctx.strokeStyle = s.isMetal ? "#ef4444" : "#64748b";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 4; i++) {
         ctx.beginPath();
-        ctx.arc(c.x + 8, c.y - 6, (selectedOrganelle==='nucleus')?14:10, 0, Math.PI*2);
-        ctx.fill();
-      });
+        ctx.moveTo(sx + 20 + i * 25, sy - 10);
+        ctx.lineTo(sx + 25 + i * 25, sy - 30);
+        ctx.stroke();
+      }
+      ctx.fillStyle = s.isMetal ? "#f87171" : "#94a3b8";
+      ctx.font = "12px sans-serif";
+      ctx.fillText(s.isMetal ? "全体に素早く熱が伝導！" : "熱がほとんど伝わらない", cx, sy - 38);
+    } 
+    // 磁性テスト
+    else if (testType === 'magnet') {
+      const mx = s.magnet ? cx + 70 : cx + 115;
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(mx, cy - 25, 35, 20);
+      ctx.fillStyle = "#3b82f6";
+      ctx.fillRect(mx, cy + 5, 35, 20);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "11px sans-serif";
+      ctx.fillText("N", mx + 17, cy - 10);
+      ctx.fillText("S", mx + 17, cy + 20);
     }
 
     animId = requestAnimationFrame(render);
@@ -1159,18 +1472,1201 @@ function initC2CellOrganelles(canvas) {
   return { destroy: () => cancelAnimationFrame(animId) };
 }
 
-// 凸レンズ (中1・エネルギー)
+
+
+
+
+
+
+
+
+
+
+// ==========================================
+// 【完全版】ガスバーナーの使い方 (中1・物質)
+// ==========================================
+function initC1Burner(canvas) {
+  const ctx = canvas.getContext('2d');
+  
+  let mainValve = false;  // 元栓
+  let subCock = false;    // コック
+  let gasScrew = 0;       // 下: ガスねじ (0:閉)
+  let airScrew = 0;       // 上: 空気ねじ (0:閉)
+  let isLit = false;      // 点火中か
+  let matchLit = false;   // マッチ点火中
+  let animId;
+  let flameTime = 0;
+
+  const controls = document.getElementById('labControlsArea');
+  controls.innerHTML = `
+    <div class="ctrl-group">
+      <label>1. 元栓とコック:</label>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-action ${mainValve?'':'secondary'}" id="bMain">${mainValve?'元栓: 閉':'元栓: 開'}</button>
+        <button class="btn-action ${subCock?'':'secondary'}" id="bCock">${subCock?'コック: 閉':'コック: 開'}</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>2. マッチ操作:</label>
+      <button class="btn-action secondary" id="bMatch">マッチをすって近づける 🔥</button>
+    </div>
+    <div class="ctrl-group">
+      <label>3. ガス調節ねじ (下): <span id="gVal" class="ctrl-val">${gasScrew}%</span></label>
+      <input type="range" id="gRange" min="0" max="100" value="${gasScrew}">
+    </div>
+    <div class="ctrl-group">
+      <label>4. 空気調節ねじ (上): <span id="aVal" class="ctrl-val">${airScrew}%</span></label>
+      <input type="range" id="aRange" min="0" max="100" value="${airScrew}">
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1;">
+      <label>消火トレーニング:</label>
+      <button class="btn-action secondary" id="bExtinguish">消火の手順を開始する (正しい順序で閉める) 🧯</button>
+    </div>
+  `;
+
+  document.getElementById('bMain').onclick = () => {
+    mainValve = !mainValve;
+    if (!mainValve) isLit = false;
+    updateStatus(); updateBtnViews();
+  };
+  document.getElementById('bCock').onclick = () => {
+    subCock = !subCock;
+    if (!subCock) isLit = false;
+    updateStatus(); updateBtnViews();
+  };
+  document.getElementById('bMatch').onclick = () => {
+    matchLit = true;
+    setTimeout(() => {
+      if (mainValve && subCock && gasScrew > 10) {
+        isLit = true;
+      }
+      matchLit = false;
+      updateStatus();
+    }, 1200);
+    updateStatus();
+  };
+  document.getElementById('gRange').oninput = (e) => {
+    gasScrew = parseInt(e.target.value);
+    document.getElementById('gVal').textContent = `${gasScrew}%`;
+    if (gasScrew === 0) isLit = false;
+    updateStatus();
+  };
+  document.getElementById('aRange').oninput = (e) => {
+    airScrew = parseInt(e.target.value);
+    document.getElementById('aVal').textContent = `${airScrew}%`;
+    updateStatus();
+  };
+
+  // 消火手順ボタン
+  document.getElementById('bExtinguish').onclick = () => {
+    if (!isLit) {
+      setStatus("火がついていません。まず点火して炎を調節してから消火の手順を練習しましょう。");
+      return;
+    }
+    if (airScrew > 0) {
+      airScrew = 0;
+      document.getElementById('aRange').value = 0;
+      document.getElementById('aVal').textContent = "0%";
+      setStatus("【消火ステップ①】ガスねじを押さえながら、上の『空気調節ねじ』を先に閉めました！次はガスねじです。");
+    } else if (gasScrew > 0) {
+      gasScrew = 0;
+      isLit = false;
+      document.getElementById('gRange').value = 0;
+      document.getElementById('gVal').textContent = "0%";
+      setStatus("【消火ステップ②】下の『ガス調節ねじ』を閉めて火が消えました！次はコックと元栓を閉めましょう。");
+    } else if (subCock) {
+      subCock = false;
+      updateBtnViews();
+      setStatus("【消火ステップ③】『コック』を閉じました！最後に元栓を閉めます。");
+    } else if (mainValve) {
+      mainValve = false;
+      updateBtnViews();
+      setStatus("【消火完了！】『元栓』を閉めました。完璧な消火手順です！");
+    }
+  };
+
+  function updateBtnViews() {
+    const bm = document.getElementById('bMain');
+    const bc = document.getElementById('bCock');
+    bm.className = `btn-action ${mainValve?'':'secondary'}`;
+    bm.textContent = mainValve ? '元栓: 開中 (閉じる)' : '元栓: 閉 (開く)';
+    bc.className = `btn-action ${subCock?'':'secondary'}`;
+    bc.textContent = subCock ? 'コック: 開中 (閉じる)' : 'コック: 閉 (開く)';
+  }
+
+  function updateStatus() {
+    if (matchLit) {
+      setStatus("マッチをすり、バーナーの口の斜め下から近づけています…（すったマッチは手前に引く）");
+      return;
+    }
+    if (!isLit) {
+      if (!mainValve || !subCock) setStatus("【点火手順①】元栓とコックを開いてください（ねじが両方閉まっていることを確認後）。");
+      else if (gasScrew === 0) setStatus("【点火手順②】マッチをすって近づけながら、下のガス調節ねじを開いて点火します。");
+      else setStatus("ガスが出ています！引火の危険があるためマッチを近づけるかガスを閉めてください！", true);
+      return;
+    }
+
+    if (airScrew < 15) {
+      setStatus("【不完全燃焼（黄色い炎）】空気不足でススが出ます。下ねじを押さえながら上の空気ねじを開きましょう！", true);
+    } else if (airScrew >= 35 && airScrew <= 65) {
+      setStatus("【適正な青い炎！】内炎と外炎がはっきりした安定した高温の青い炎です。");
+    } else {
+      setStatus("【空気過剰】空気が多すぎて音が鳴り炎が浮き上がっています！空気ねじを少し閉めましょう。", true);
+    }
+  }
+  updateStatus();
+
+  function render() {
+    flameTime += 0.25;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2, baseY = h - 45;
+
+    // 台座と筒
+    ctx.fillStyle = "#475569"; ctx.fillRect(cx - 50, baseY - 15, 100, 15);
+    ctx.fillStyle = "#64748b"; ctx.fillRect(cx - 14, baseY - 165, 28, 150);
+
+    // 下ねじ (ガス)
+    ctx.fillStyle = gasScrew > 0 ? "#3b82f6" : "#334155";
+    ctx.fillRect(cx - 24, baseY - 60, 48, 18);
+    ctx.fillStyle = "#ffffff"; ctx.font = "10px sans-serif";
+    ctx.fillText("ガス(下)", cx - 18, baseY - 47);
+
+    // 上ねじ (空気)
+    ctx.fillStyle = airScrew > 0 ? "#10b981" : "#1e293b";
+    ctx.fillRect(cx - 22, baseY - 100, 44, 18);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("空気(上)", cx - 18, baseY - 87);
+
+    // 炎の描画
+    if (isLit) {
+      const topY = baseY - 165;
+      const fH = 55 + gasScrew * 0.7;
+      const wave = Math.sin(flameTime) * 4;
+
+      if (airScrew < 15) {
+        // 黄色い炎
+        ctx.fillStyle = "rgba(249, 115, 22, 0.85)";
+        ctx.beginPath();
+        ctx.moveTo(cx - 14, topY);
+        ctx.quadraticCurveTo(cx - 25 + wave, topY - fH * 0.6, cx + wave, topY - fH);
+        ctx.quadraticCurveTo(cx + 25 + wave, topY - fH * 0.6, cx + 14, topY);
+        ctx.fill();
+      } else {
+        // 青い炎 (外炎・内炎)
+        ctx.fillStyle = "rgba(56, 189, 248, 0.6)";
+        ctx.beginPath();
+        ctx.moveTo(cx - 12, topY);
+        ctx.quadraticCurveTo(cx - 18, topY - fH * 0.5, cx, topY - fH);
+        ctx.quadraticCurveTo(cx + 18, topY - fH * 0.5, cx + 12, topY);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(37, 99, 235, 0.9)";
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, topY);
+        ctx.lineTo(cx, topY - fH * 0.45);
+        ctx.lineTo(cx + 9, topY);
+        ctx.fill();
+      }
+    }
+
+    if (matchLit) {
+      ctx.strokeStyle = "#ca8a04"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(cx + 65, baseY - 110); ctx.lineTo(cx + 35, baseY - 145); ctx.stroke();
+      ctx.fillStyle = "#ef4444"; ctx.beginPath(); ctx.arc(cx + 35, baseY - 145, 8, 0, Math.PI*2); ctx.fill();
+    }
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  return { destroy: () => cancelAnimationFrame(animId) };
+}
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【静的構造観察版】植物細胞と動物細胞の観察・比較・染色実験 (中2・生命)
+// ===================================================================
+function initC2Cell(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // 実験状態
+  let cellType = "plant";      // 'plant'(オオカナダモ), 'animal'(ほおの内側の粘膜)
+  let isStained = false;       // 酢酸オルセインで染色したか
+  let selectedPart = "all";    // 'all', 'nucleus', 'membrane', 'wall', 'chloroplast', 'vacuole', 'cytoplasm'
+  let animId;
+
+  // 実写顕微鏡写真（PNG）
+  const cellImages = {
+    plant_raw: new Image(),
+    plant_stained: new Image(),
+    animal_raw: new Image(),
+    animal_stained: new Image()
+  };
+  cellImages.plant_raw.src = 'cell_plant_raw.jpg';
+  cellImages.plant_stained.src = 'cell_plant_stained.jpg';
+  cellImages.animal_raw.src = 'cell_animal_raw.jpg';
+  cellImages.animal_stained.src = 'cell_animal_stained.jpg';
+
+  // 葉緑体の固定配置データ（静止）
+  const chloroplasts = [
+    { x: -70, y: -35, r: 8, rot: 0.2 },
+    { x: -50, y: 38,  r: 9, rot: -0.4 },
+    { x: -20, y: -42, r: 7.5, rot: 0.1 },
+    { x: 15,  y: -38, r: 8.5, rot: 0.5 },
+    { x: 55,  y: -32, r: 8, rot: -0.2 },
+    { x: 72,  y: -10, r: 7.5, rot: 0.3 },
+    { x: 75,  y: 20,  r: 8, rot: 0.1 },
+    { x: 50,  y: 40,  r: 9, rot: -0.3 },
+    { x: 10,  y: 42,  r: 8, rot: 0.4 },
+    { x: -25, y: 40,  r: 8.5, rot: -0.1 },
+    { x: -65, y: 15,  r: 7, rot: 0.2 },
+    { x: -40, y: -15, r: 8, rot: -0.5 },
+    { x: 40,  y: -12, r: 7.5, rot: 0.6 },
+    { x: 35,  y: 22,  r: 8, rot: -0.2 }
+  ];
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 観察対象の細胞:</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-action ${cellType==='plant'?'':'secondary'}" id="bPlant">🌿 植物細胞 (オオカナダモ)</button>
+          <button class="btn-action ${cellType==='animal'?'':'secondary'}" id="bAnimal">👤 動物細胞 (ほおの内側)</button>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <label>2. 指示薬（染色液）の操作:</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-action ${isStained?'secondary':''}" id="bStain" style="${isStained?'':'background:#be123c; border-color:#be123c;'}">💧 酢酸オルセイン液を滴下</button>
+          <button class="btn-action secondary" id="bResetStain">未染色の状態に戻す 🔄</button>
+        </div>
+      </div>
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>3. 細胞の構造をタップして確認（共通点と違い）:</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn-action ${selectedPart==='all'?'':'secondary'}" id="pAll">すべて表示</button>
+          <button class="btn-action ${selectedPart==='nucleus'?'':'secondary'}" id="pNucleus">核（両方）</button>
+          <button class="btn-action ${selectedPart==='membrane'?'':'secondary'}" id="pMembrane">細胞膜（両方）</button>
+          <button class="btn-action ${selectedPart==='cytoplasm'?'':'secondary'}" id="pCytoplasm">細胞質（両方）</button>
+          <button class="btn-action ${selectedPart==='wall'?'':'secondary'}" id="pWall" style="${cellType==='animal'?'opacity:0.35; pointer-events:none;':''}">細胞壁（植物のみ）</button>
+          <button class="btn-action ${selectedPart==='chloroplast'?'':'secondary'}" id="pChloroplast" style="${cellType==='animal'?'opacity:0.35; pointer-events:none;':''}">葉緑体（植物のみ）</button>
+          <button class="btn-action ${selectedPart==='vacuole'?'':'secondary'}" id="pVacuole" style="${cellType==='animal'?'opacity:0.35; pointer-events:none;':''}">液胞（植物のみ）</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('bPlant').onclick = () => { cellType = 'plant'; selectedPart = 'all'; renderControls(); updateStatus(); };
+    document.getElementById('bAnimal').onclick = () => { cellType = 'animal'; selectedPart = 'all'; renderControls(); updateStatus(); };
+    document.getElementById('bStain').onclick = () => { isStained = true; renderControls(); updateStatus(); };
+    document.getElementById('bResetStain').onclick = () => { isStained = false; renderControls(); updateStatus(); };
+
+    document.getElementById('pAll').onclick = () => { selectedPart = 'all'; renderControls(); updateStatus(); };
+    document.getElementById('pNucleus').onclick = () => { selectedPart = 'nucleus'; renderControls(); updateStatus(); };
+    document.getElementById('pMembrane').onclick = () => { selectedPart = 'membrane'; renderControls(); updateStatus(); };
+    document.getElementById('pCytoplasm').onclick = () => { selectedPart = 'cytoplasm'; renderControls(); updateStatus(); };
+    document.getElementById('pWall').onclick = () => { selectedPart = 'wall'; renderControls(); updateStatus(); };
+    document.getElementById('pChloroplast').onclick = () => { selectedPart = 'chloroplast'; renderControls(); updateStatus(); };
+    document.getElementById('pVacuole').onclick = () => { selectedPart = 'vacuole'; renderControls(); updateStatus(); };
+  }
+  renderControls();
+
+  function updateStatus() {
+    let msg = "";
+    if (cellType === 'plant') {
+      msg = "【オオカナダモの細胞（植物）】規則正しい長方形のつくりです。外側を硬い「細胞壁」が覆い、緑色の「葉緑体」や水分の詰まった「液胞」が観察できます。";
+    } else {
+      msg = "【ヒトのほおの内側の粘膜（動物）】細胞壁がないため不規則で柔らかい形をしています。植物に見られる「細胞壁」「葉緑体」「発達した液胞」はありません。";
+    }
+
+    if (isStained) {
+      msg += " ★酢酸オルセイン（または酢酸カーミン）を滴下したことで、核が赤紫色に濃く染まりはっきりと確認できるようになりました！";
+    } else {
+      msg += " （未染色の状態では核は無色透明に近く、見分けるのが困難です）";
+    }
+    setStatus(msg);
+  }
+  updateStatus();
+
+  function render() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    const cx = w / 2 - 85;
+    const cy = h / 2 - 10;
+    const isPlant = (cellType === "plant");
+
+    // ==========================================
+    // 顕微鏡の円形視野 (左側メイン)
+    // ==========================================
+    const scopeR = 145;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, scopeR, 0, Math.PI * 2);
+    ctx.clip();
+
+    // 視野背景（未染色は暗い青灰・染色は淡い赤紫）
+    ctx.fillStyle = isStained ? "#2a121e" : "#0f172a";
+    ctx.fillRect(cx - scopeR, cy - scopeR, scopeR * 2, scopeR * 2);
+
+    // 視野グリッド
+    ctx.strokeStyle = isStained ? "rgba(244, 63, 94, 0.08)" : "rgba(255, 255, 255, 0.04)";
+    ctx.lineWidth = 1;
+    for (let x = cx - scopeR; x < cx + scopeR; x += 30) {
+      ctx.beginPath(); ctx.moveTo(x, cy - scopeR); ctx.lineTo(x, cy + scopeR); ctx.stroke();
+    }
+    for (let y = cy - scopeR; y < cy + scopeR; y += 30) {
+      ctx.beginPath(); ctx.moveTo(cx - scopeR, y); ctx.lineTo(cx + scopeR, y); ctx.stroke();
+    }
+
+    if (isPlant) {
+      drawPlantCell(cx, cy);
+    } else {
+      drawAnimalCell(cx, cy);
+    }
+
+    ctx.restore();
+
+    // 顕微鏡視野リング
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, scopeR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(isPlant ? "🔬 顕微鏡視野: オオカナダモ細胞 (400倍)" : "🔬 顕微鏡視野: ヒトのほお粘膜上皮細胞 (400倍)", cx, cy + scopeR + 24);
+
+    // ==========================================
+    // 右側：実写写真枠 ＆ 比較チェック表
+    // ==========================================
+    const rightX = w - 240, rightW = 215;
+    drawPhotoBox(rightX, 15, rightW, 140);
+    drawComparisonTable(rightX, 165, rightW, 205);
+
+    animId = requestAnimationFrame(render);
+  }
+
+  // ========================================================
+  // 植物細胞の描画（静的構造）
+  // ========================================================
+  function drawPlantCell(cx, cy) {
+    const pw = 190, ph = 110;
+    const px = cx - pw / 2, py = cy - ph / 2;
+
+    // 1. 細胞壁
+    const isWallHigh = (selectedPart === 'all' || selectedPart === 'wall');
+    ctx.fillStyle = isWallHigh ? "#14532d" : "#1f2937";
+    ctx.fillRect(px - 5, py - 5, pw + 10, ph + 10);
+    ctx.strokeStyle = isWallHigh ? "#4ade80" : "#475569";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(px - 5, py - 5, pw + 10, ph + 10);
+
+    // 2. 細胞膜
+    const isMemHigh = (selectedPart === 'all' || selectedPart === 'membrane');
+    ctx.strokeStyle = isMemHigh ? "#38bdf8" : "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, pw, ph);
+
+    // 3. 細胞質
+    const isCytHigh = (selectedPart === 'all' || selectedPart === 'cytoplasm');
+    ctx.fillStyle = isCytHigh ? "rgba(34, 197, 94, 0.15)" : "rgba(100, 116, 139, 0.1)";
+    ctx.fillRect(px, py, pw, ph);
+
+    // 4. 液胞
+    const isVacHigh = (selectedPart === 'all' || selectedPart === 'vacuole');
+    ctx.fillStyle = isVacHigh ? "rgba(56, 189, 248, 0.22)" : "rgba(148, 163, 184, 0.05)";
+    ctx.strokeStyle = isVacHigh ? "#0284c7" : "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx + 8, cy, 70, 38, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 5. 葉緑体（散在配置）
+    const isChlHigh = (selectedPart === 'all' || selectedPart === 'chloroplast');
+    chloroplasts.forEach(ch => {
+      ctx.fillStyle = isChlHigh ? "#22c55e" : "#15803d";
+      ctx.beginPath();
+      ctx.ellipse(cx + ch.x, cy + ch.y, ch.r, ch.r * 0.65, ch.rot, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#166534";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // 6. 核（端寄り）
+    const isNucHigh = (selectedPart === 'all' || selectedPart === 'nucleus');
+    const nucX = cx - 52, nucY = cy - 22;
+    ctx.beginPath();
+    ctx.arc(nucX, nucY, 15, 0, Math.PI * 2);
+    if (isStained) {
+      ctx.fillStyle = isNucHigh ? "#f43f5e" : "#881337";
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = isNucHigh ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 255, 255, 0.1)";
+      ctx.fill();
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // ラベル
+    if (selectedPart === 'nucleus') drawLabel(nucX, nucY, "核 (染色で明瞭化)");
+    if (selectedPart === 'wall') drawLabel(px + pw / 2, py - 12, "細胞壁 (体を支える頑丈な壁)");
+    if (selectedPart === 'chloroplast') drawLabel(cx + 15, cy - 38, "葉緑体 (光合成を行う)");
+    if (selectedPart === 'vacuole') drawLabel(cx + 8, cy, "液胞 (水分・老廃物の貯蔵)");
+  }
+
+  // ========================================================
+  // 動物細胞の描画
+  // ========================================================
+  function drawAnimalCell(cx, cy) {
+    // 1. 細胞膜（不規則な輪郭）
+    const isMemHigh = (selectedPart === 'all' || selectedPart === 'membrane');
+    ctx.beginPath();
+    ctx.moveTo(cx - 75, cy - 40);
+    ctx.bezierCurveTo(cx - 30, cy - 85, cx + 60, cy - 70, cx + 85, cy - 20);
+    ctx.bezierCurveTo(cx + 100, cy + 40, cx + 40, cy + 85, cx - 10, cy + 75);
+    ctx.bezierCurveTo(cx - 60, cy + 70, cx - 95, cy + 20, cx - 75, cy - 40);
+    ctx.closePath();
+
+    // 細胞質
+    const isCytHigh = (selectedPart === 'all' || selectedPart === 'cytoplasm');
+    ctx.fillStyle = isCytHigh ? "rgba(244, 63, 94, 0.12)" : "rgba(100, 116, 139, 0.1)";
+    ctx.fill();
+    ctx.strokeStyle = isMemHigh ? "#38bdf8" : "#475569";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 2. 核（中央付近）
+    const isNucHigh = (selectedPart === 'all' || selectedPart === 'nucleus');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+    if (isStained) {
+      ctx.fillStyle = isNucHigh ? "#f43f5e" : "#881337";
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = isNucHigh ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.15)";
+      ctx.fill();
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    if (selectedPart === 'nucleus') drawLabel(cx, cy, "核 (ほぼ中央・染色で明瞭化)");
+    if (selectedPart === 'membrane') drawLabel(cx + 70, cy - 40, "細胞膜 (薄くしなやかな膜)");
+    if (selectedPart === 'cytoplasm') drawLabel(cx - 40, cy + 40, "細胞質");
+  }
+
+  function drawLabel(x, y, text) {
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`▲ ${text}`, x, y - 8);
+  }
+
+  // ========================================================
+  // 実写写真枠 (PNG対応)
+  // ========================================================
+  function drawPhotoBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    const stainTag = isStained ? "【染色済】" : "【未染色】";
+    const nameTag = cellType === 'plant' ? "オオカナダモ" : "ほお粘膜";
+    ctx.fillText(`📷 実写写真: ${nameTag}`, bx + 8, by + 16);
+
+    const imgKey = `${cellType}_${isStained ? 'stained' : 'raw'}`;
+    const img = cellImages[imgKey];
+
+    if (img.complete && img.naturalWidth !== 0) {
+      ctx.drawImage(img, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`画像ファイル待機中:`, bx + bw / 2, by + 60);
+      ctx.fillText(`${imgKey}.png`, bx + bw / 2, by + 76);
+      ctx.fillStyle = isStained ? "#f43f5e" : "#38bdf8";
+      ctx.fillText(stainTag, bx + bw / 2, by + 98);
+    }
+  }
+
+  // ========================================================
+  // 比較テーブル
+  // ========================================================
+  function drawComparisonTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 細胞構造の比較（テスト必出）", bx + 8, by + 16);
+
+    const items = [
+      { name: "核", plant: true, animal: true },
+      { name: "細胞膜", plant: true, animal: true },
+      { name: "細胞質", plant: true, animal: true },
+      { name: "細胞壁", plant: true, animal: false },
+      { name: "葉緑体", plant: true, animal: false },
+      { name: "液胞", plant: true, animal: false }
+    ];
+
+    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("構造名", bx + 12, by + 34);
+    ctx.fillText("植物", bx + 110, by + 34);
+    ctx.fillText("動物", bx + 165, by + 34);
+
+    items.forEach((it, idx) => {
+      const iy = by + 50 + idx * 24;
+      const isBoth = it.plant && it.animal;
+
+      if (selectedPart === 'all' || 
+         (selectedPart === 'nucleus' && it.name === '核') ||
+         (selectedPart === 'membrane' && it.name === '細胞膜') ||
+         (selectedPart === 'cytoplasm' && it.name === '細胞質') ||
+         (selectedPart === 'wall' && it.name === '細胞壁') ||
+         (selectedPart === 'chloroplast' && it.name === '葉緑体') ||
+         (selectedPart === 'vacuole' && it.name === '液胞')) {
+        ctx.fillStyle = "rgba(56, 189, 248, 0.15)";
+        ctx.fillRect(bx + 4, iy - 12, bw - 8, 20);
+      }
+
+      ctx.fillStyle = isBoth ? "#e2e8f0" : "#4ade80";
+      ctx.textAlign = "left";
+      ctx.fillText(it.name + (isBoth ? "" : " ★"), bx + 12, iy + 2);
+
+      // 植物
+      ctx.fillStyle = it.plant ? "#22c55e" : "#ef4444";
+      ctx.textAlign = "center";
+      ctx.fillText(it.plant ? "◯" : "✕", bx + 122, iy + 2);
+
+      // 動物
+      ctx.fillStyle = it.animal ? "#22c55e" : "#ef4444";
+      ctx.fillText(it.animal ? "◯" : "✕", bx + 177, iy + 2);
+    });
+  }
+
+  render();
+
+  return {
+    destroy: () => cancelAnimationFrame(animId)
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ========================================================
+// 【5大機能完全統合版】光の反射・屈折・全反射と応用 (中1・エネルギー)
+// ========================================================
+function initC1Refraction(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // 実験モード: 'tank'(半円水槽), 'block'(直方体ガラス), 'fiber'(光ファイバー), 'coin'(浮き上がるコイン)
+  let expMode = 'tank';
+  let direction = 'air_to_mat'; // 'air_to_mat' または 'mat_to_air' (tank時)
+  let material = 'water';       // 'water'(1.33), 'glass'(1.50), 'diamond'(2.42)
+  let incidentAngle = 35;       // 入射角 (0°〜80°)
+  let showProtractor = true;    // 分度器・法線表示
+  let isDragging = false;
+  let animId;
+
+  // 物質データ
+  const matData = {
+    water:   { name: "水",           n: 1.333, color: "rgba(14, 165, 233, 0.22)", border: "#38bdf8" },
+    glass:   { name: "ガラス",       n: 1.500, color: "rgba(148, 163, 184, 0.25)", border: "#94a3b8" },
+    diamond: { name: "ダイヤモンド", n: 2.420, color: "rgba(192, 132, 252, 0.22)", border: "#c084fc" }
+  };
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>実験モードの選択:</label>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          <button class="btn-action ${expMode==='tank'?'':'secondary'}" id="mTank">1. 光学水槽（反射・屈折・全反射）</button>
+          <button class="btn-action ${expMode==='block'?'':'secondary'}" id="mBlock">2. 直方体ガラス（2回屈折・平行シフト）</button>
+          <button class="btn-action ${expMode==='fiber'?'':'secondary'}" id="mFiber">3. 光ファイバー（全反射の応用）</button>
+          <button class="btn-action ${expMode==='coin'?'':'secondary'}" id="mCoin">4. 浮き上がるコイン（身近な屈折）</button>
+        </div>
+      </div>
+
+      ${expMode === 'tank' ? `
+        <div class="ctrl-group">
+          <label>進む向き:</label>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-action ${direction==='air_to_mat'?'':'secondary'}" id="bDirIn">空気 → 物質</button>
+            <button class="btn-action ${direction==='mat_to_air'?'':'secondary'}" id="bDirOut">物質 → 空気</button>
+          </div>
+        </div>
+        <div class="ctrl-group">
+          <label>物質の種類:</label>
+          <select id="matSelect" class="search-input" style="padding:6px;">
+            <option value="water" ${material==='water'?'selected':''}>水 (屈折率 1.33 / 臨界角 48.6°)</option>
+            <option value="glass" ${material==='glass'?'selected':''}>ガラス (屈折率 1.50 / 臨界角 41.8°)</option>
+            <option value="diamond" ${material==='diamond'?'selected':''}>ダイヤモンド (屈折率 2.42 / 臨界角 24.4°)</option>
+          </select>
+        </div>
+      ` : ''}
+
+      ${(expMode === 'tank' || expMode === 'block' || expMode === 'fiber') ? `
+        <div class="ctrl-group">
+          <label id="angleLabel">入射角: <span id="angleVal" class="ctrl-val">${incidentAngle}°</span> <small style="color:#64748b;">(画面上の光源をドラッグも可能)</small></label>
+          <input type="range" id="angleRange" min="0" max="${expMode==='fiber'?45:80}" value="${incidentAngle}">
+        </div>
+      ` : ''}
+
+      ${expMode === 'tank' ? `
+        <div class="ctrl-group">
+          <label>補助線表示:</label>
+          <button class="btn-action ${showProtractor?'':'secondary'}" id="bProt">分度器・法線の表示</button>
+        </div>
+      ` : ''}
+    `;
+
+    // イベントバインド
+    document.getElementById('mTank').onclick = () => { expMode = 'tank'; incidentAngle = 35; renderControls(); };
+    document.getElementById('mBlock').onclick = () => { expMode = 'block'; incidentAngle = 40; renderControls(); };
+    document.getElementById('mFiber').onclick = () => { expMode = 'fiber'; incidentAngle = 18; renderControls(); };
+    document.getElementById('mCoin').onclick = () => { expMode = 'coin'; renderControls(); };
+
+    if (expMode === 'tank') {
+      document.getElementById('bDirIn').onclick = () => { direction = 'air_to_mat'; renderControls(); };
+      document.getElementById('bDirOut').onclick = () => { direction = 'mat_to_air'; renderControls(); };
+      document.getElementById('matSelect').onchange = (e) => { material = e.target.value; renderControls(); };
+      document.getElementById('bProt').onclick = () => { showProtractor = !showProtractor; renderControls(); };
+    }
+
+    const aRange = document.getElementById('angleRange');
+    if (aRange) {
+      aRange.oninput = (e) => {
+        incidentAngle = parseInt(e.target.value);
+        document.getElementById('angleVal').textContent = `${incidentAngle}°`;
+      };
+    }
+  }
+  renderControls();
+
+  // マウス/タッチドラッグによる角度直接操作
+  function updateAngleByPointer(x, y) {
+    if (expMode === 'coin') return;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const dx = x - cx, dy = y - cy;
+    let deg = 0;
+
+    if (expMode === 'tank') {
+      if (direction === 'air_to_mat') {
+        deg = Math.atan2(-dx, -dy) * 180 / Math.PI;
+      } else {
+        deg = Math.atan2(-dx, dy) * 180 / Math.PI;
+      }
+    } else if (expMode === 'block') {
+      deg = Math.atan2(-dx, -dy) * 180 / Math.PI;
+    } else if (expMode === 'fiber') {
+      deg = Math.atan2(dy, -dx) * 180 / Math.PI;
+    }
+
+    if (deg >= 0 && deg <= (expMode==='fiber'?45:80)) {
+      incidentAngle = Math.round(deg);
+      const valSpan = document.getElementById('angleVal');
+      const rng = document.getElementById('angleRange');
+      if (valSpan) valSpan.textContent = `${incidentAngle}°`;
+      if (rng) rng.value = incidentAngle;
+    }
+  }
+
+  function handlePointerDown(e) {
+    isDragging = true;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || e.touches[0].clientX) - rect.left;
+    const y = (e.clientY || e.touches[0].clientY) - rect.top;
+    updateAngleByPointer(x, y);
+  }
+
+  function handlePointerMove(e) {
+    if (!isDragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+    updateAngleByPointer(x, y);
+  }
+
+  function handlePointerUp() { isDragging = false; }
+
+  canvas.onmousedown = handlePointerDown;
+  window.onmousemove = handlePointerMove;
+  window.onmouseup = handlePointerUp;
+  canvas.ontouchstart = (e) => { e.preventDefault(); handlePointerDown(e); };
+  window.ontouchmove = handlePointerMove;
+  window.ontouchend = handlePointerUp;
+
+  // メイン描画ループ
+  function loop() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#090d16";
+    ctx.fillRect(0, 0, w, h);
+
+    if (expMode === 'tank') {
+      drawTankMode(w, h);
+    } else if (expMode === 'block') {
+      drawBlockMode(w, h);
+    } else if (expMode === 'fiber') {
+      drawFiberMode(w, h);
+    } else if (expMode === 'coin') {
+      drawCoinMode(w, h);
+    }
+
+    animId = requestAnimationFrame(loop);
+  }
+  loop();
+
+  // --- 1. 光学水槽モード ---
+  function drawTankMode(w, h) {
+    const cx = w / 2, cy = h / 2;
+    const r = Math.min(w, h) * 0.42;
+    const curMat = matData[material];
+    const nMat = curMat.n;
+    const critDeg = Math.asin(1 / nMat) * 180 / Math.PI;
+
+    // 媒質の背景
+    ctx.fillStyle = curMat.color;
+    if (direction === 'air_to_mat') {
+      ctx.fillRect(cx - r, cy, r * 2, r);
+    } else {
+      ctx.fillRect(cx - r, cy - r, r * 2, r);
+    }
+
+    if (showProtractor) {
+      ctx.strokeStyle = "#334155";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "#facc15";
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx, cy + r);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 境界面
+    ctx.strokeStyle = curMat.border;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy);
+    ctx.lineTo(cx + r, cy);
+    ctx.stroke();
+
+    // 媒質名
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 13px sans-serif";
+    if (direction === 'air_to_mat') {
+      ctx.fillText("空気 (n = 1.00)", cx - r + 15, cy - 20);
+      ctx.fillText(`${curMat.name} (n = ${nMat.toFixed(2)})`, cx - r + 15, cy + 30);
+    } else {
+      ctx.fillText(`${curMat.name} (n = ${nMat.toFixed(2)})`, cx - r + 15, cy - 20);
+      ctx.fillText("空気 (n = 1.00)", cx - r + 15, cy + 30);
+    }
+
+    // 計算
+    const radIn = incidentAngle * Math.PI / 180;
+    let isTotalRef = false;
+    let radRefr = 0;
+    let degRefr = 0;
+
+    if (direction === 'air_to_mat') {
+      radRefr = Math.asin(Math.sin(radIn) / nMat);
+      degRefr = radRefr * 180 / Math.PI;
+    } else {
+      const sinR = nMat * Math.sin(radIn);
+      if (sinR > 1.0) isTotalRef = true;
+      else {
+        radRefr = Math.asin(sinR);
+        degRefr = radRefr * 180 / Math.PI;
+      }
+    }
+
+    // 入射光
+    const inSignY = (direction === 'air_to_mat') ? -1 : 1;
+    const inX = cx - Math.sin(radIn) * r;
+    const inY = cy + inSignY * Math.cos(radIn) * r;
+
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(inX, inY);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+
+    // レーザー光源
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(inX, inY, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 反射光
+    const refX = cx + Math.sin(radIn) * r;
+    const refY = cy + inSignY * Math.cos(radIn) * r;
+    ctx.strokeStyle = `rgba(248, 113, 113, ${isTotalRef ? 1.0 : 0.4})`;
+    ctx.lineWidth = isTotalRef ? 3.5 : 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(refX, refY);
+    ctx.stroke();
+
+    // 屈折光
+    if (!isTotalRef) {
+      const refrSignY = (direction === 'air_to_mat') ? 1 : -1;
+      const refrX = cx + Math.sin(radRefr) * r;
+      const refrY = cy + refrSignY * Math.cos(radRefr) * r;
+
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(refrX, refrY);
+      ctx.stroke();
+    }
+
+    // ステータス更新
+    if (incidentAngle === 0) {
+      setStatus("【垂直入射 (0°)】境界面に垂直に入った光は屈折せずまっすぐ直進します。");
+    } else if (direction === 'air_to_mat') {
+      setStatus(`【空気 → ${curMat.name}】入射角 (${incidentAngle}°) ＞ 屈折角 (${degRefr.toFixed(1)}°)。光が物質に入ると、法線側に折れ曲がり屈折角は小さくなります。`);
+    } else {
+      if (isTotalRef) {
+        setStatus(`【全反射発生！】入射角 (${incidentAngle}°) が臨界角 (${critDeg.toFixed(1)}°) を超えたため、光が空気中へ出られず100%境界面で反射しました！`, false);
+      } else {
+        setStatus(`【${curMat.name} → 空気】入射角 (${incidentAngle}°) ＜ 屈折角 (${degRefr.toFixed(1)}°)。空気中に出ると屈折角は大きくなります。臨界角（${critDeg.toFixed(1)}°）を超えると全反射します。`);
+      }
+    }
+  }
+
+  // --- 2. 直方体ガラスブロック（2回屈折・平行シフト） ---
+  function drawBlockMode(w, h) {
+    const cx = w / 2, cy = h / 2;
+    const bw = 240, bh = 110;
+    const n = 1.50; // ガラス
+
+    // ガラスブロック
+    ctx.fillStyle = "rgba(148, 163, 184, 0.25)";
+    ctx.fillRect(cx - bw / 2, cy - bh / 2, bw, bh);
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(cx - bw / 2, cy - bh / 2, bw, bh);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("直方体ガラス (屈折率: 1.50)", cx - bw / 2 + 10, cy - bh / 2 + 20);
+
+    const rad1 = incidentAngle * Math.PI / 180;
+    const rad2 = Math.asin(Math.sin(rad1) / n); // 内部の屈折角
+
+    const p1x = cx - 40;
+    const p1y = cy - bh / 2; // 第1境界面の入射点
+    const p0x = p1x - Math.tan(rad1) * 90;
+    const p0y = p1y - 90;    // 光源位置
+
+    // 第2境界面の通過点
+    const shiftX = Math.tan(rad2) * bh;
+    const p2x = p1x + shiftX;
+    const p2y = cy + bh / 2;
+
+    // 出射光（第1入射光と完全平行）
+    const p3x = p2x + Math.tan(rad1) * 90;
+    const p3y = p2y + 90;
+
+    // 法線1
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p1x, p1y - 40); ctx.lineTo(p1x, p1y + 40);
+    ctx.moveTo(p2x, p2y - 40); ctx.lineTo(p2x, p2y + 40);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 光線（入射 → 内部屈折 → 出射）
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(p0x, p0y);
+    ctx.lineTo(p1x, p1y);
+    ctx.lineTo(p2x, p2y);
+    ctx.lineTo(p3x, p3y);
+    ctx.stroke();
+
+    // 入射光の延長線（点線：どれだけ平行シフトしたか）
+    const extX = p1x + Math.tan(rad1) * (bh + 90);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
+    ctx.beginPath();
+    ctx.moveTo(p1x, p1y);
+    ctx.lineTo(extX, p3y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // レーザー光源
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(p0x, p0y, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    const deg2 = (rad2 * 180 / Math.PI).toFixed(1);
+    setStatus(`【直方体ガラスの2回屈折】①入るとき：空気→ガラスで法線側へ曲がる (${incidentAngle}° → ${deg2}°)。②出るとき：ガラス→空気で離れる向きへ曲がる (${deg2}° → ${incidentAngle}°)。★結果として『元の光と完全に平行なまま横にずれる』！`);
+  }
+
+  // --- 3. 光ファイバーモード（全反射の応用） ---
+  function drawFiberMode(w, h) {
+    const cx = w / 2, cy = h / 2;
+    const fw = w - 100, fh = 60;
+    const fx = 50, fy = cy - fh / 2;
+
+    // ファイバー（コア）
+    ctx.fillStyle = "rgba(56, 189, 248, 0.2)";
+    ctx.fillRect(fx, fy, fw, fh);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(fx, fy, fw, fh);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("光ファイバー（透明なガラス・プラスチック線）", fx + 15, fy - 15);
+
+    // 入射角と内部バウンド計算
+    const rad = (incidentAngle * Math.PI / 180) * 0.7;
+    const startX = fx - 40;
+    const startY = cy + Math.sin(rad) * 40;
+
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(fx, cy);
+
+    // ファイバー内でのバウンド（全反射）
+    let curX = fx;
+    let curY = cy;
+    let dy = -Math.tan(rad) * 45 || -15;
+
+    for (let i = 0; i < 7; i++) {
+      const targetY = dy < 0 ? fy : fy + fh;
+      const stepX = Math.abs((targetY - curY) / dy) * 40;
+      if (curX + stepX > fx + fw) {
+        const restX = (fx + fw) - curX;
+        ctx.lineTo(fx + fw, curY + (dy / 40) * restX);
+        break;
+      }
+      curX += stepX;
+      curY = targetY;
+      ctx.lineTo(curX, curY);
+      dy *= -1; // 全反射で向き反転
+    }
+    ctx.stroke();
+
+    // 光源
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(startX, startY, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    setStatus("【光ファイバーの全反射】管の内側の壁で『光が100%全反射をくり返す』ため、光が外に漏れずエネルギーを保ったまま遠くまで届きます。内視鏡（胃カメラ）や高速インターネット通信の心臓部です！");
+  }
+
+  // --- 4. 浮き上がるコインモード（身近な屈折現象） ---
+  function drawCoinMode(w, h) {
+    const cx = w / 2, cy = h / 2 + 10;
+    const tw = 260, th = 150;
+    const tx = cx - tw / 2, ty = cy - th / 2;
+
+    // ビーカーと水
+    ctx.fillStyle = "rgba(14, 165, 233, 0.22)";
+    ctx.fillRect(tx, ty + 30, tw, th - 30);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(tx, ty, tw, th);
+
+    // 水面
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty + 30); ctx.lineTo(tx + tw, ty + 30); ctx.stroke();
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("水面", tx + 10, ty + 25);
+
+    // 本物のコイン（底）
+    const realCoinX = cx - 40;
+    const realCoinY = ty + th - 12;
+    ctx.fillStyle = "#eab308";
+    ctx.beginPath();
+    ctx.ellipse(realCoinX, realCoinY, 22, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ca8a04";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("実際のコイン（水底）", realCoinX - 55, realCoinY + 20);
+
+    // 目の位置（右斜め上）
+    const eyeX = tx + tw + 35;
+    const eyeY = ty - 40;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("👁️ 目", eyeX - 10, eyeY - 10);
+
+    // 水面での屈折点
+    const refrPointX = cx + 25;
+    const refrPointY = ty + 30;
+
+    // 実光線（コイン → 水面屈折点 → 目）
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(realCoinX, realCoinY);
+    ctx.lineTo(refrPointX, refrPointY);
+    ctx.lineTo(eyeX, eyeY);
+    ctx.stroke();
+
+    // 脳が錯覚する見かけの直線（破線）
+    const dx = eyeX - refrPointX;
+    const dy = eyeY - refrPointY;
+    const apparentCoinX = refrPointX - dx * 0.55;
+    const apparentCoinY = refrPointY - dy * 0.55;
+
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "#a855f7";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(eyeX, eyeY);
+    ctx.lineTo(apparentCoinX, apparentCoinY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 浮き上がって見える見かけのコイン（虚像）
+    ctx.fillStyle = "rgba(250, 204, 21, 0.6)";
+    ctx.beginPath();
+    ctx.ellipse(apparentCoinX, apparentCoinY, 22, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#d8b4fe";
+    ctx.stroke();
+
+    ctx.fillStyle = "#d8b4fe";
+    ctx.fillText("浮き上がって見える位置（虚像）", apparentCoinX - 80, apparentCoinY - 14);
+
+    setStatus("【なぜ水中の物は浅く見える？】コインから出た光が水面で折れ曲がって（屈折して）目に届きます。しかし人間の脳は『光はまっすぐ直進してくる』と錯覚するため、光線の延長線上の浅い位置に像（虚像）が浮き上がって見えます！");
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      canvas.onmousedown = null;
+      window.onmousemove = null;
+      window.onmouseup = null;
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+// ========================================================
+// 【本格光学台＆4大改良版】凸レンズの光学ベンチ (中1・エネルギー)
+// ========================================================
 function initC1Lens(canvas) {
   const ctx = canvas.getContext('2d');
-  let objDist = 30;
-  const f = 15;
+  
+  // 実験パラメータ
+  const f = 15;             // 焦点距離 (15cm)
+  let objDist = 30;         // 光源とレンズの距離 (初期値: 2f = 30cm)
+  let screenDist = 30;      // レンズとスクリーンの距離 (手動調整)
+  let coverHalf = false;    // レンズ上半分を覆うか
+  let showRays = true;      // 光線表示の切り替え
   let animId;
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
+    <div class="ctrl-group">
+      <label>1. 光源（Fの文字）とレンズの距離: <span id="distVal" class="ctrl-val">${objDist} cm</span> (焦点 f = ${f} cm)</label>
+      <input type="range" id="distRange" min="5" max="45" value="${objDist}">
+    </div>
+    <div class="ctrl-group">
+      <label>2. スクリーンを動かしてピントを合わせる: <span id="scrVal" class="ctrl-val">${screenDist} cm</span></label>
+      <input type="range" id="scrRange" min="10" max="50" value="${screenDist}">
+    </div>
     <div class="ctrl-group" style="grid-column: 1 / -1;">
-      <label>光源と凸レンズの距離: <span id="distVal" class="ctrl-val">${objDist} cm</span> (焦点距離 f = ${f} cm)</label>
-      <input type="range" id="distRange" min="5" max="50" value="${objDist}">
+      <label>3. 発展検証・表示設定:</label>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn-action ${coverHalf?'':'secondary'}" id="bCover">${coverHalf?'厚紙を外す':'レンズの上半分を黒い厚紙で覆う 📄'}</button>
+        <button class="btn-action ${showRays?'':'secondary'}" id="bRay">${showRays?'光線を隠す':'光線を表示する 💡'}</button>
+      </div>
     </div>
   `;
 
@@ -1178,226 +2674,538 @@ function initC1Lens(canvas) {
     objDist = parseInt(e.target.value);
     document.getElementById('distVal').textContent = `${objDist} cm`;
   };
+  document.getElementById('scrRange').oninput = (e) => {
+    screenDist = parseInt(e.target.value);
+    document.getElementById('scrVal').textContent = `${screenDist} cm`;
+  };
+  document.getElementById('bCover').onclick = () => {
+    coverHalf = !coverHalf;
+    document.getElementById('bCover').className = `btn-action ${coverHalf?'':'secondary'}`;
+    document.getElementById('bCover').textContent = coverHalf ? '厚紙を外す' : 'レンズの上半分を黒い厚紙で覆う 📄';
+  };
+  document.getElementById('bRay').onclick = () => {
+    showRays = !showRays;
+    document.getElementById('bRay').className = `btn-action ${showRays?'':'secondary'}`;
+    document.getElementById('bRay').textContent = showRays ? '光線を隠す' : '光線を表示する 💡';
+  };
 
   function render() {
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, w, h);
 
-    const cy = h/2, cx = w/2;
-    const scale = 7;
+    const cy = h / 2 - 20; // 光軸の高さ
+    const cx = w / 2 - 40; // レンズの位置
+    const scale = 5.5;      // 1cmあたりのpxスケール
 
+    // 光軸（水平ライン）
     ctx.strokeStyle = "#475569";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(30, cy);
-    ctx.lineTo(w-30, cy);
+    ctx.moveTo(20, cy);
+    ctx.lineTo(w - 20, cy);
     ctx.stroke();
 
+    // 焦点 F, 2F の目印
+    ctx.fillStyle = "#facc15";
+    ctx.font = "11px sans-serif";
+    [-f, f].forEach(df => {
+      ctx.beginPath();
+      ctx.arc(cx + df * scale, cy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText("F", cx + df * scale - 4, cy + 18);
+    });
+    [-2 * f, 2 * f].forEach(df => {
+      ctx.beginPath();
+      ctx.arc(cx + df * scale, cy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText("2F", cx + df * scale - 7, cy + 18);
+    });
+
+    // 凸レンズの描画
     ctx.strokeStyle = "#38bdf8";
     ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.moveTo(cx, cy - 110);
-    ctx.lineTo(cx, cy + 110);
+    ctx.moveTo(cx, cy - 90);
+    ctx.lineTo(cx, cy + 90);
     ctx.stroke();
 
-    ctx.fillStyle = "#facc15";
-    [-f, f].forEach(df => {
-      ctx.beginPath();
-      ctx.arc(cx + df*scale, cy, 4, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillText("F", cx + df*scale - 4, cy + 20);
-    });
-    [-2*f, 2*f].forEach(df => {
-      ctx.beginPath();
-      ctx.arc(cx + df*scale, cy, 4, 0, Math.PI*2);
-      ctx.fill();
-      ctx.fillText("2F", cx + df*scale - 8, cy + 20);
-    });
-
-    const objX = cx - objDist * scale;
-    const objH = 50;
-    ctx.strokeStyle = "#ef4444";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(objX, cy);
-    ctx.lineTo(objX, cy - objH);
-    ctx.stroke();
-    ctx.fillStyle = "#f97316";
-    ctx.beginPath();
-    ctx.arc(objX, cy - objH, 6, 0, Math.PI*2);
-    ctx.fill();
-
-    if (objDist > f) {
-      const imgDist = (f * objDist) / (objDist - f);
-      const magRatio = imgDist / objDist;
-      const imgH = objH * magRatio;
-      const imgX = cx + imgDist * scale;
-
-      ctx.strokeStyle = "rgba(250, 204, 21, 0.4)";
+    // レンズ上半分を覆う厚紙
+    if (coverHalf) {
+      ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
+      ctx.fillRect(cx - 8, cy - 90, 16, 90);
+      ctx.strokeStyle = "#ef4444";
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(objX, cy - objH);
-      ctx.lineTo(cx, cy - objH);
-      ctx.lineTo(imgX, cy + imgH);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(objX, cy - objH);
-      ctx.lineTo(imgX, cy + imgH);
-      ctx.stroke();
+      ctx.strokeRect(cx - 8, cy - 90, 16, 90);
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "10px sans-serif";
+      ctx.fillText("厚紙", cx - 12, cy - 95);
+    }
 
-      if (imgX < w - 20) {
-        ctx.strokeStyle = "#22c55e";
-        ctx.lineWidth = 4;
+    // 光源（Fの文字）の配置
+    const objX = cx - objDist * scale;
+    const objH = 40; // 光源の高さ
+    drawLetterF(objX, cy, objH, false, false, 1.0);
+
+    // 結像計算
+    const isReal = objDist > f;
+    const isFocus = objDist === f;
+    let perfectImgDist = 0;
+    let magRatio = 1;
+
+    if (isReal) {
+      perfectImgDist = (f * objDist) / (objDist - f);
+      magRatio = perfectImgDist / objDist;
+    }
+
+    // スクリーンの描画（白い縦板）
+    const scrX = cx + screenDist * scale;
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(scrX - 3, cy - 95, 6, 190);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px sans-serif";
+    ctx.fillText("スクリーン", scrX - 25, cy + 110);
+
+    // --- 光線の描画（showRaysが有効な場合） ---
+    if (showRays && !isFocus) {
+      ctx.lineWidth = 1.5;
+      if (isReal) {
+        const pImgX = cx + perfectImgDist * scale;
+        const pImgH = objH * magRatio;
+
+        // 1. 光軸に平行な光線（覆われていなければ表示）
+        if (!coverHalf) {
+          ctx.strokeStyle = "rgba(250, 204, 21, 0.5)";
+          ctx.beginPath();
+          ctx.moveTo(objX, cy - objH);
+          ctx.lineTo(cx, cy - objH);
+          ctx.lineTo(pImgX, cy + pImgH);
+          ctx.stroke();
+        }
+        // 2. レンズの中心を通る光線（厚紙で覆われても通過する）
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
         ctx.beginPath();
-        ctx.moveTo(imgX, cy);
-        ctx.lineTo(imgX, cy + imgH);
+        ctx.moveTo(objX, cy - objH);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(pImgX, cy + pImgH);
         ctx.stroke();
 
-        ctx.fillStyle = "white";
-        ctx.font = "12px sans-serif";
-        ctx.fillText(`倒立実像 (${imgDist.toFixed(1)}cm, ${magRatio.toFixed(2)}倍)`, imgX - 60, cy + imgH + 25);
-      }
-
-      if (Math.abs(objDist - 2*f) < 1) {
-        setStatus(`【焦点距離の2倍 (30cm)】実物と同じ大きさの倒立実像が反対側30cmの位置にできました！`);
-      } else if (objDist > 2*f) {
-        setStatus(`【2Fより遠い】実物より縮小された倒立実像ができています。`);
+        // 3. 手前の焦点を通って平行になる光線
+        ctx.strokeStyle = "rgba(34, 197, 94, 0.5)";
+        ctx.beginPath();
+        ctx.moveTo(objX, cy - objH);
+        ctx.lineTo(cx, cy + (objH * (f / (objDist - f))));
+        ctx.lineTo(pImgX, cy + pImgH);
+        ctx.stroke();
       } else {
-        setStatus(`【Fと2Fの間】実物より拡大された倒立実像が遠くに結像しています。`);
+        // 虚像の光線追跡
+        const vImgDist = (f * objDist) / (f - objDist);
+        const vMag = vImgDist / objDist;
+        const vImgX = cx - vImgDist * scale;
+        const vImgH = objH * vMag;
+
+        // 実光線（右へ拡散）
+        ctx.strokeStyle = "rgba(250, 204, 21, 0.4)";
+        ctx.beginPath();
+        if (!coverHalf) {
+          ctx.moveTo(objX, cy - objH);
+          ctx.lineTo(cx, cy - objH);
+          ctx.lineTo(cx + 100, cy - objH + (100 / f) * (objH));
+          ctx.stroke();
+        }
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.5)";
+        ctx.beginPath();
+        ctx.moveTo(objX, cy - objH);
+        ctx.lineTo(cx + 100, cy + (100 / objDist) * (objH));
+        ctx.stroke();
+
+        // 虚像への延長線（破線）
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(168, 85, 247, 0.5)";
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - objH);
+        ctx.lineTo(vImgX, cy - vImgH);
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(vImgX, cy - vImgH);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
-    } else if (objDist < f) {
-      const imgDist = Math.abs((f * objDist) / (objDist - f));
-      const magRatio = imgDist / objDist;
-      const imgH = objH * magRatio;
-      const imgX = cx - imgDist * scale;
+    }
 
-      ctx.strokeStyle = "rgba(244, 63, 94, 0.6)";
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - objH);
-      ctx.lineTo(imgX, cy - imgH);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    // --- スクリーン上の像／虚像モードの判定と表示 ---
+    const blurDist = isReal ? Math.abs(screenDist - perfectImgDist) : 999;
+    const isFocused = isReal && (blurDist < 1.2);
+    const alpha = coverHalf ? 0.45 : 0.95; // 厚紙で覆うと明るさが半分になる！
 
-      ctx.strokeStyle = "#a855f7";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(imgX, cy);
-      ctx.lineTo(imgX, cy - imgH);
-      ctx.stroke();
+    // スクリーン投影のプレビュー枠（左下）
+    drawScreenMonitor(w - 170, h - 150, 140, 130, isReal, isFocused, blurDist, magRatio, alpha);
 
-      ctx.fillStyle = "white";
-      ctx.fillText(`正立虚像 (虫メガネ)`, Math.max(10, imgX - 30), cy - imgH - 12);
-      setStatus(`【焦点の内側】スクリーンには映りませんが、レンズを覗くと拡大された正立虚像が見えます！`);
+    // ステータス更新 & ガイダンス
+    if (isFocus) {
+      setStatus("【焦点上 (15cm)】光線が平行に進むため、スクリーンをどこに置いても像は結ばれず、レンズを覗いても像は見えません。");
+    } else if (isReal) {
+      if (isFocused) {
+        let sizeDesc = Math.abs(objDist - 2*f) < 1 ? "実物と同じ大きさ" : (objDist > 2*f ? "実物より小さい" : "実物より大きい");
+        let coverDesc = coverHalf ? "（★レンズを半分隠しても像は欠けず、暗くなるだけ！）" : "";
+        setStatus(`【ピント合致！】スクリーンに上下左右が逆さの『倒立実像』がくっきり映りました！(${sizeDesc}) ${coverDesc}`);
+      } else {
+        const dir = screenDist < perfectImgDist ? "遠ざけて" : "近づけて";
+        setStatus(`ピントが合っていません（像がぼやけています）。スクリーンを${dir}、くっきり映る位置（約${perfectImgDist.toFixed(1)}cm）を探しましょう。`, true);
+      }
     } else {
-      setStatus(`【焦点上 (15cm)】光線が平行になり、像は結ばれません。`);
+      // 虚像（虫メガネ）
+      setStatus("【焦点の内側】光が広がってしまうためスクリーンには像が映りません。右側ののぞき枠からレンズを覗くと、拡大された『正立虚像』が見えます！（虫メガネの原理）");
+      drawMagnifierView(w - 170, 20, 140, 130, objDist, f, coverHalf);
     }
 
     animId = requestAnimationFrame(render);
   }
-  render();
 
+  // 光源「F」を描く関数
+  function drawLetterF(x, baselineY, height, flipH, flipV, alpha) {
+    ctx.save();
+    ctx.translate(x, baselineY);
+    ctx.scale(flipH ? -1 : 1, flipV ? 1 : -1);
+    ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
+    ctx.strokeStyle = `rgba(254, 202, 202, ${alpha})`;
+    ctx.lineWidth = 1.5;
+
+    // Fの文字棒
+    ctx.fillRect(-4, 0, 8, height);
+    ctx.strokeRect(-4, 0, 8, height);
+    // 上の横棒
+    ctx.fillRect(0, height - 7, height * 0.45, 7);
+    ctx.strokeRect(0, height - 7, height * 0.45, 7);
+    // 中央の横棒
+    ctx.fillRect(0, height * 0.5 - 3, height * 0.3, 6);
+    ctx.strokeRect(0, height * 0.5 - 3, height * 0.3, 6);
+
+    ctx.restore();
+  }
+
+  // スクリーンに映る像のモニター（右下）
+  function drawScreenMonitor(bx, by, bw, bh, isReal, isFocused, blurDist, magRatio, alpha) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = isFocused ? "#22c55e" : "#64748b";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("スクリーン上の見え方", bx + 12, by + 16);
+
+    if (!isReal) {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "12px sans-serif";
+      ctx.fillText("（像は映りません）", bx + 18, by + bh / 2 + 5);
+      return;
+    }
+
+    // 実像（上下反転かつ左右反転）
+    const blur = Math.min(16, blurDist * 1.5);
+    ctx.save();
+    ctx.filter = `blur(${blur}px)`;
+    // 上下左右が反転した「F」を描画
+    drawLetterF(bx + bw / 2, by + bh / 2 + (20 * magRatio), 40 * magRatio, true, true, alpha);
+    ctx.filter = "none";
+    ctx.restore();
+  }
+
+  // 虚像用の虫メガネのぞき窓（右上）
+  function drawMagnifierView(bx, by, bw, bh, dist, focal, isCovered) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#a855f7";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#d8b4fe";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("👁️ レンズを右からのぞく", bx + 8, by + 16);
+
+    const mag = (focal / (focal - dist));
+    const alpha = isCovered ? 0.45 : 0.95;
+
+    // 正立のまま大きく見える「F」
+    drawLetterF(bx + bw / 2 - 10, by + bh - 20, Math.min(bh - 40, 35 * mag), false, false, alpha);
+  }
+
+  render();
   return { destroy: () => cancelAnimationFrame(animId) };
 }
 
-// 気体の発生と性質 (中1・物質)
+
+
+
+
+
+// ========================================================
+// 【自由組み合わせ＆本格検証版】気体の発生と性質 (中1・物質)
+// ========================================================
 function initC1Gas(canvas) {
   const ctx = canvas.getContext('2d');
-  let selectedGas = "co2";
-  let testAction = null;
-  let bubbleCount = 0;
+  
+  // 選択中の試薬
+  let selectedSolid = "none";   // none, limestone, mno2, zinc
+  let selectedLiquid = "none";  // none, hcl, h2o2, water
+  let activeGas = null;         // null, co2, o2, h2
+  let testAction = null;        // null, senko, match, lime
+  let bubbleTick = 0;
   let animId;
+
+  // 固体の表示名
+  const solidNames = {
+    none: "（なし）",
+    limestone: "石灰石",
+    mno2: "二酸化マンガン",
+    zinc: "亜鉛"
+  };
+
+  // 液体の表示名
+  const liquidNames = {
+    none: "（なし）",
+    hcl: "うすい塩酸",
+    h2o2: "過酸化水素水",
+    water: "水"
+  };
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
     <div class="ctrl-group">
-      <label>発生させる気体:</label>
-      <select id="gasSelect" class="search-input" style="padding:6px;">
-        <option value="co2">二酸化炭素 (石灰石 + うすい塩酸)</option>
-        <option value="o2">酸素 (二酸化マンガン + 過酸化水素水)</option>
-        <option value="h2">水素 (亜鉛 + うすい塩酸)</option>
+      <label>1. 試験管に入れる固体:</label>
+      <select id="solidSelect" class="search-input" style="padding:6px;">
+        <option value="none">（なし）</option>
+        <option value="limestone">石灰石</option>
+        <option value="mno2">二酸化マンガン</option>
+        <option value="zinc">亜鉛</option>
       </select>
     </div>
     <div class="ctrl-group">
-      <label>確認実験を行う:</label>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-action" id="btnSenko">火のついた線香</button>
+      <label>2. 注ぎ入れる液体:</label>
+      <select id="liquidSelect" class="search-input" style="padding:6px;">
+        <option value="none">（なし）</option>
+        <option value="hcl">うすい塩酸</option>
+        <option value="h2o2">過酸化水素水</option>
+        <option value="water">水</option>
+      </select>
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1;">
+      <label>3. 発生した気体を調べる実験:</label>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn-action secondary" id="btnSenko">火のついた線香を入れる</button>
+        <button class="btn-action secondary" id="btnMatch">マッチの火を近づける 🔥</button>
         <button class="btn-action secondary" id="btnLime">石灰水を通す</button>
+        <button class="btn-action secondary" id="btnResetG">試験管を洗う（リセット）</button>
       </div>
     </div>
   `;
 
-  document.getElementById('gasSelect').onchange = (e) => {
-    selectedGas = e.target.value;
-    testAction = null;
-    setStatus(`気体を「${getGasName(selectedGas)}」に切り替えました。確認実験ボタンを押してみましょう。`);
+  document.getElementById('solidSelect').onchange = (e) => {
+    selectedSolid = e.target.value;
+    checkReaction();
   };
-  document.getElementById('btnSenko').onclick = () => { testAction = 'senko'; updateReaction(); };
-  document.getElementById('btnLime').onclick = () => { testAction = 'lime'; updateReaction(); };
+  document.getElementById('liquidSelect').onchange = (e) => {
+    selectedLiquid = e.target.value;
+    checkReaction();
+  };
 
-  function getGasName(g) {
-    if (g==='co2') return '二酸化炭素';
-    if (g==='o2') return '酸素';
-    return '水素';
+  document.getElementById('btnSenko').onclick = () => { testAction = 'senko'; updateTestResult(); };
+  document.getElementById('btnMatch').onclick = () => { testAction = 'match'; updateTestResult(); };
+  document.getElementById('btnLime').onclick = () => { testAction = 'lime'; updateTestResult(); };
+  document.getElementById('btnResetG').onclick = () => {
+    selectedSolid = "none";
+    selectedLiquid = "none";
+    activeGas = null;
+    testAction = null;
+    document.getElementById('solidSelect').value = "none";
+    document.getElementById('liquidSelect').value = "none";
+    setStatus("試験管をきれいに洗いました。固体と液体を選んで反応させてみましょう。");
+  };
+
+  // 組み合わせ判定ロジック
+  function checkReaction() {
+    testAction = null;
+    
+    // 二酸化炭素
+    if (selectedSolid === 'limestone' && selectedLiquid === 'hcl') {
+      activeGas = 'co2';
+      setStatus("【反応開始！】シュワシュワと激しく泡立ち、無色・無臭の気体が発生しています！どんな気体か調べてみましょう。（集め方：水に少し溶け空気より重いので「水上置換」または「下方置換」）");
+    }
+    // 酸素
+    else if (selectedSolid === 'mno2' && selectedLiquid === 'h2o2') {
+      activeGas = 'o2';
+      setStatus("【反応開始！】二酸化マンガンが触媒となり、過酸化水素水から勢いよく気泡が発生しています！（集め方：水に溶けにくいため「水上置換」）");
+    }
+    // 水素
+    else if (selectedSolid === 'zinc' && selectedLiquid === 'hcl') {
+      activeGas = 'h2';
+      setStatus("【反応開始！】金属（亜鉛）が塩酸にとけて細かな泡がたくさん発生しています！（集め方：水に溶けにくく空気より極めて軽いので「水上置換」）");
+    }
+    // それ以外の組み合わせ
+    else {
+      activeGas = null;
+      if (selectedSolid !== 'none' && selectedLiquid !== 'none') {
+        setStatus(`【${solidNames[selectedSolid]}】と【${liquidNames[selectedLiquid]}】を混ぜましたが、化学反応は起こらず気体は発生しませんでした。別の組み合わせを試してみましょう。`, true);
+      } else {
+        setStatus("固体と液体の両方を試験管に入れてください。");
+      }
+    }
   }
 
-  function updateReaction() {
+  // 検証実験の結果判定
+  function updateTestResult() {
+    if (!activeGas) {
+      setStatus("気体が発生していません。先に反応が起きる組み合わせを見つけて気体を溜めましょう。", true);
+      return;
+    }
+
     if (testAction === 'senko') {
-      if (selectedGas === 'o2') setStatus("【酸素】線香の火がパッと激しく炎を上げて燃え上がりました！（助燃性）");
-      else if (selectedGas === 'co2') setStatus("【二酸化炭素】線香の火が試験管に入れた瞬間にスッと消えました。");
-      else setStatus("【水素】ポンと小さな音を立てて気体が燃え（爆発）、水滴ができました！");
+      if (activeGas === 'o2') {
+        setStatus("【火のついた線香】線香が『パッ』と激しく炎を上げて燃え上がりました！（酸素の助燃性）");
+      } else if (activeGas === 'co2') {
+        setStatus("【火のついた線香】線香の火が試験管に入れた瞬間にスッと消えました！（二酸化炭素に物を燃やすはたらきはありません）");
+      } else if (activeGas === 'h2') {
+        setStatus("【火のついた線香】試験管の口で線香を入れた瞬間、気体に引火してポンと音が鳴りました。");
+      }
+    } else if (testAction === 'match') {
+      if (activeGas === 'h2') {
+        setStatus("【マッチの火】『ポンッ！』と爆発音を立てて気体が激しく燃え、試験管の内側にわずかな水滴がつきました！（水素の可燃性）");
+      } else if (activeGas === 'o2') {
+        setStatus("【マッチの火】マッチの炎が一段と大きく明るく燃え上がりました！");
+      } else if (activeGas === 'co2') {
+        setStatus("【マッチの火】マッチの火が一瞬で消えてしまいました。");
+      }
     } else if (testAction === 'lime') {
-      if (selectedGas === 'co2') setStatus("【二酸化炭素】石灰水が白く濁りました（炭酸カルシウムの沈殿生成）。");
-      else setStatus(`【${getGasName(selectedGas)}】石灰水には何の変化も起きず、無色透明のままです。`);
+      if (activeGas === 'co2') {
+        setStatus("【石灰水】気体を通すと、無色透明だった石灰水が『白く濁り』ました！（炭酸カルシウムの沈殿生成。二酸化炭素の確実な検出法です）");
+      } else {
+        setStatus("【石灰水】気体を通しても石灰水に変化はなく、透明なままでした。");
+      }
     }
   }
 
   function loop() {
-    bubbleCount++;
+    bubbleTick++;
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, w, h);
 
-    const tx = w/2 - 60, ty = h/2 - 80, tw = 60, th = 150;
-    ctx.strokeStyle = "#94a3b8";
+    const tx = w / 2 - 40, ty = h / 2 - 80, tw = 80, th = 170;
+
+   // 試験管のガラス外枠（垂直で整った形）
+    const r = tw / 2; // 底部の半径
+    ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 4;
-    ctx.strokeRect(tx, ty, tw, th);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);                         // 左上の口
+    ctx.lineTo(tx, ty + th - r);                // 左の縦線（まっすぐ下ろす）
+    ctx.arc(tx + r, ty + th - r, r, Math.PI, 0, true); // 底の丸み（きれいな半円）
+    ctx.lineTo(tx + tw, ty);                    // 右の縦線（まっすぐ上げる）
+    ctx.stroke();
 
-    ctx.fillStyle = testAction==='lime' && selectedGas==='co2' ? "rgba(255,255,255,0.7)" : "rgba(56,189,248,0.2)";
-    ctx.fillRect(tx+2, ty+th/2, tw-4, th/2-2);
-
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    for (let i=0; i<4; i++) {
-      const by = (ty+th - (bubbleCount*2 + i*25) % (th/2));
+    // 液体の描画
+    if (selectedLiquid !== 'none') {
+      ctx.fillStyle = testAction === 'lime' && activeGas === 'co2' 
+        ? "rgba(255, 255, 255, 0.85)" 
+        : "rgba(56, 189, 248, 0.25)";
       ctx.beginPath();
-      ctx.arc(tx + 15 + i*10, by, 3, 0, Math.PI*2);
+      ctx.moveTo(tx + 2, ty + th / 2);
+      ctx.lineTo(tx + 2, ty + th - r);
+      ctx.arc(tx + r, ty + th - r, r - 2, Math.PI, 0, true);
+      ctx.lineTo(tx + tw - 2, ty + th / 2);
+      ctx.closePath();
       ctx.fill();
     }
 
+    // 固体の描画（底に沈む）
+    if (selectedSolid !== 'none') {
+      const by = ty + th - 15;
+      if (selectedSolid === 'limestone') {
+        ctx.fillStyle = "#e2e8f0"; // 白い小石
+        [-15, 0, 15].forEach(dx => {
+          ctx.beginPath();
+          ctx.ellipse(tx + tw/2 + dx, by, 8, 6, 0, 0, Math.PI*2);
+          ctx.fill();
+        });
+      } else if (selectedSolid === 'mno2') {
+        ctx.fillStyle = "#1e293b"; // 黒い粉末
+        ctx.fillRect(tx + 15, by - 6, tw - 30, 12);
+      } else if (selectedSolid === 'zinc') {
+        ctx.fillStyle = "#94a3b8"; // 灰色の金属粒
+        [-12, 12].forEach(dx => {
+          ctx.fillRect(tx + tw/2 + dx - 6, by - 8, 12, 8);
+        });
+      }
+    }
+
+    // 気泡アニメーション（反応中）
+    if (activeGas) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      const bSpeed = activeGas === 'h2' ? 3 : 2;
+      for (let i = 0; i < 6; i++) {
+        const bx = tx + 16 + (i * 10);
+        const by = (ty + th - 20 - ((bubbleTick * bSpeed + i * 20) % (th / 2)));
+        ctx.beginPath();
+        ctx.arc(bx, by, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 検証ツールの描画
     if (testAction === 'senko') {
-      const sx = tx + tw/2, sy = ty + 30;
+      const sx = tx + tw / 2, sy = ty + 35;
       ctx.strokeStyle = "#78350f";
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(sx + 40, sy - 50);
+      ctx.moveTo(sx + 35, sy - 50);
       ctx.lineTo(sx, sy);
       ctx.stroke();
 
-      if (selectedGas === 'o2') {
+      if (activeGas === 'o2') {
         ctx.fillStyle = "#f97316";
         ctx.beginPath();
-        ctx.arc(sx, sy, 16, 0, Math.PI*2);
+        ctx.arc(sx, sy, 18, 0, Math.PI * 2);
         ctx.fill();
-      } else if (selectedGas === 'h2') {
-        ctx.fillStyle = "#38bdf8";
+        ctx.fillStyle = "#facc15";
         ctx.beginPath();
-        ctx.arc(sx, sy, 22, 0, Math.PI*2);
+        ctx.arc(sx, sy, 9, 0, Math.PI * 2);
         ctx.fill();
-      } else {
+      } else if (activeGas === 'co2') {
         ctx.fillStyle = "#64748b";
         ctx.beginPath();
-        ctx.arc(sx, sy, 3, 0, Math.PI*2);
+        ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#ef4444";
+        ctx.beginPath();
+        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (testAction === 'match') {
+      const mx = tx + tw / 2, my = ty + 10;
+      ctx.strokeStyle = "#ca8a04";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(mx + 40, my - 30);
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+
+      if (activeGas === 'h2') {
+        // ポンと爆発炎
+        ctx.fillStyle = "rgba(56, 189, 248, 0.8)";
+        ctx.beginPath();
+        ctx.arc(mx, my, 26, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (activeGas === 'o2') {
+        ctx.fillStyle = "#f97316";
+        ctx.beginPath();
+        ctx.arc(mx, my, 20, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (activeGas === 'co2') {
+        ctx.fillStyle = "#475569";
+        ctx.beginPath();
+        ctx.arc(mx, my, 3, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -1409,71 +3217,183 @@ function initC1Gas(canvas) {
   return { destroy: () => cancelAnimationFrame(animId) };
 }
 
-// 溶解度と再結晶 (中1・物質)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ==========================================
+// 【完全版】溶解度と再結晶 (中1・物質)
+// ==========================================
 function initC1Solubility(canvas) {
   const ctx = canvas.getContext('2d');
+  
   let temp = 60;
   let solute = "kno3";
+  let isEvaporating = false; // 水の蒸発モード
+  let showFiltration = false; // ろ過器具の図解モード
   let animId;
+
+  const crystalImages = { kno3: new Image(), alum: new Image(), nacl: new Image() };
+  crystalImages.kno3.src = 'crystal_kno3.jpg';
+  crystalImages.alum.src = 'crystal_alum.jpg';
+  crystalImages.nacl.src = 'crystal_nacl.jpg';
+
+  const soluteData = {
+    kno3: { name: "硝酸カリウム", added: 60, calcSol: (t) => 13.3 + (t * t) / 58 },
+    alum: { name: "ミョウバン",     added: 40, calcSol: (t) => 5.7 + (t * t) / 120 },
+    nacl: { name: "食塩 (NaCl)",   added: 40, calcSol: (t) => 35.8 + t * 0.03 }
+  };
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
     <div class="ctrl-group">
-      <label>水温: <span id="tVal" class="ctrl-val">${temp} ℃</span> (水 100g)</label>
-      <input type="range" id="tRange" min="10" max="80" value="${temp}">
+      <label>1. 物質の選択:</label>
+      <select id="soluteSelect" class="search-input" style="padding:6px;">
+        <option value="kno3">硝酸カリウム (冷却再結晶に向く)</option>
+        <option value="alum">ミョウバン (冷却再結晶に向く)</option>
+        <option value="nacl">食塩 (水を蒸発させて再結晶)</option>
+      </select>
     </div>
     <div class="ctrl-group">
-      <label>溶かす物質 (60g 投入):</label>
-      <select id="soluteSelect" class="search-input" style="padding:6px;">
-        <option value="kno3">硝酸カリウム (温度で溶解度が激変)</option>
-        <option value="nacl">食塩 (温度変化にほとんど影響されない)</option>
-      </select>
+      <label>2. ビーカー水温: <span id="tVal" class="ctrl-val">${temp} ℃</span></label>
+      <input type="range" id="tRange" min="10" max="80" value="${temp}">
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+      <button class="btn-action secondary" id="bEvap">🔥 水を蒸発させて再結晶する (蒸発皿加熱)</button>
+      <button class="btn-action secondary" id="bFilter">🧪 ろ過の正しい器具の配置を確認する</button>
     </div>
   `;
 
+  document.getElementById('soluteSelect').onchange = (e) => {
+    solute = e.target.value;
+    isEvaporating = false;
+    showFiltration = false;
+    updateStatus();
+  };
   document.getElementById('tRange').oninput = (e) => {
     temp = parseInt(e.target.value);
     document.getElementById('tVal').textContent = `${temp} ℃`;
+    isEvaporating = false;
+    showFiltration = false;
+    updateStatus();
   };
-  document.getElementById('soluteSelect').onchange = (e) => {
-    solute = e.target.value;
+  document.getElementById('bEvap').onclick = () => {
+    isEvaporating = true;
+    showFiltration = false;
+    setStatus(`【蒸発による再結晶】水溶液を加熱して水を蒸発させました！水に溶けていられなくなった【${soluteData[solute].name}】の結晶が蒸発皿一面にびっしりと析出しました！食塩はこの方法で取り出します。`);
   };
+  document.getElementById('bFilter').onclick = () => {
+    showFiltration = !showFiltration;
+    setStatus("【ろ過の最重要ポイント】①ガラス棒に液を伝わらせて静かに注ぐ。②ろうとの足のとがった方をビーカーの壁面にぴったりつける（液の飛び散り防止と流速UP）。");
+  };
+
+  function updateStatus() {
+    const s = soluteData[solute];
+    const maxSol = s.calcSol(temp);
+    const precip = Math.max(0, s.added - maxSol);
+
+    if (precip > 0) {
+      if (solute === 'nacl') {
+        setStatus(`【冷やす方法では困難】食塩は温度を下げても溶解度がほとんど減りません（約${precip.toFixed(1)}gしか出ない）。上の「水を蒸発させる」ボタンを試してみましょう！`);
+      } else {
+        setStatus(`【冷却再結晶！】水温${temp}℃で約${precip.toFixed(1)}gの結晶が析出しました！右の顕微鏡窓で結晶の形を確認しましょう。`);
+      }
+    } else {
+      setStatus(`水温${temp}℃では全て溶けています。温度を下げるか水を蒸発させてみましょう。`);
+    }
+  }
+  updateStatus();
 
   function render() {
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(0, 0, w, h);
 
-    const maxSol = solute==='kno3' ? (15 + (temp*temp)/55) : (36 + temp*0.03);
-    const added = 60;
-    const precip = Math.max(0, added - maxSol);
+    if (showFiltration) {
+      // ろ過器具の正しい配置図
+      const cx = w / 2, cy = h / 2;
+      ctx.fillStyle = "#cbd5e1"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("【ろ過の正しい器具配置（テスト頻出！）】", cx, 30);
 
-    const bx = w/2 - 70, by = h/2 - 70, bw = 140, bh = 140;
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(bx, by, bw, bh);
+      // ビーカーとろうと
+      ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 3;
+      ctx.strokeRect(cx - 50, cy + 10, 100, 90); // 受けるビーカー
 
-    ctx.fillStyle = `rgba(56, 189, 248, ${0.15 + (temp/160)})`;
-    ctx.fillRect(bx+2, by+20, bw-4, bh-22);
-
-    if (precip > 0) {
-      ctx.fillStyle = "#ffffff";
-      const pileH = Math.min(bh-30, precip * 1.4);
+      // ろうとの足（ビーカーの壁につける！）
+      ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(bx+10, by+bh);
-      ctx.lineTo(bx+bw/2, by+bh - pileH);
-      ctx.lineTo(bx+bw-10, by+bh);
-      ctx.fill();
+      ctx.moveTo(cx - 35, cy - 40); ctx.lineTo(cx + 35, cy - 40); // ろうと上
+      ctx.lineTo(cx + 5, cy);
+      ctx.lineTo(cx + 46, cy + 70); // 壁面につける足
+      ctx.stroke();
 
-      setStatus(`【析出発生】溶解度（約${maxSol.toFixed(1)}g）を超えたため、約${precip.toFixed(1)}gの結晶がビーカー底に析出しました！`);
-    } else {
-      setStatus(`【全量溶解】水温${temp}℃では溶解度（約${maxSol.toFixed(1)}g）が60g以上あるため、すべて完全に溶けています。`);
+      // ガラス棒
+      ctx.strokeStyle = "#facc15"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(cx - 60, cy - 90); ctx.lineTo(cx - 5, cy - 35); ctx.stroke();
+
+      ctx.fillStyle = "#ef4444"; ctx.font = "12px sans-serif";
+      ctx.fillText("← ガラス棒を伝わらせて注ぐ", cx - 75, cy - 65);
+      ctx.fillText("← 足のとがった方をビーカーの壁につける！", cx + 130, cy + 65);
+      animId = requestAnimationFrame(render);
+      return;
     }
 
-    ctx.fillStyle = "white";
-    ctx.font = "14px sans-serif";
-    ctx.fillText(`溶解度: ${maxSol.toFixed(1)} g / 水100g`, bx - 20, by - 20);
-    ctx.fillText(`沈殿量: ${precip.toFixed(1)} g`, bx - 20, by + bh + 30);
+    const s = soluteData[solute];
+    const maxSol = s.calcSol(temp);
+    const precip = isEvaporating ? s.added * 0.85 : Math.max(0, s.added - maxSol);
+
+    // ビーカー描画
+    const bx = w * 0.25 - 60, by = h / 2 - 75, bw = 120, bh = 145;
+    ctx.fillStyle = `rgba(56, 189, 248, ${0.15 + (temp / 180)})`;
+    ctx.fillRect(bx + 4, by + 30, bw - 8, bh - 32);
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 4; ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(`水温: ${temp} ℃`, bx - 10, by - 12);
+    ctx.fillText(`析出量: 約${precip.toFixed(1)} g`, bx - 10, by + bh + 22);
+
+    if (precip > 0) {
+      ctx.fillStyle = "#f8fafc";
+      const pH = Math.min(bh - 35, precip * 1.5);
+      ctx.beginPath();
+      ctx.moveTo(bx + 6, by + bh - 2); ctx.lineTo(bx + bw / 2, by + bh - pH); ctx.lineTo(bx + bw - 6, by + bh - 2);
+      ctx.fill();
+    }
+
+    // 顕微鏡ビュー
+    const mx = w * 0.72, my = h / 2, mr = Math.min(w, h) * 0.33;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = "#020617"; ctx.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
+
+    const img = crystalImages[solute];
+    if (precip > 0) {
+      ctx.globalAlpha = Math.min(1.0, 0.3 + (precip / 15) * 0.7);
+      if (img.complete && img.naturalWidth !== 0) {
+        ctx.drawImage(img, mx - mr * 1.15, my - mr * 1.15, mr * 2.3, mr * 2.3);
+      } else {
+        ctx.fillStyle = "#94a3b8"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText(`crystal_${solute}.jpg を保存`, mx, my);
+      }
+      ctx.globalAlpha = 1.0;
+    } else {
+      ctx.fillStyle = "#94a3b8"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("【全量溶解中】", mx, my);
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = precip > 0 ? "#38bdf8" : "#475569"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(mx, my, mr + 3, 0, Math.PI * 2); ctx.stroke();
 
     animId = requestAnimationFrame(render);
   }
@@ -1482,128 +3402,1386 @@ function initC1Solubility(canvas) {
   return { destroy: () => cancelAnimationFrame(animId) };
 }
 
-// モノコードと音 (中1・エネルギー)
+
+
+
+
+
+
+
+
+
+
+
+// ========================================================
+// 【実音発音＆オシロスコープ方眼版】モノコードと音 (中1・エネルギー)
+// ========================================================
 function initC1Sound(canvas) {
   const ctx = canvas.getContext('2d');
-  let tension = 50;
-  let len = 50;
+
+  // 音の条件パラメータ
+  let stringThickness = "thin"; // "thin"(細い) または "thick"(太い)
+  let stringLength = 50;        // 弦の長さ % (20〜100%)
+  let stringTension = 50;       // 弦の張り % (20〜100%)
+  let pluckStrength = 50;       // はじく強さ (音の大きさ: 振幅)
+
   let isPlucked = false;
-  let t = 0;
+  let isMuted = false;
+  let animTime = 0;
   let animId;
+
+  // 基準波形（比較用：初期状態を保存）
+  let savedBaseline = { freq: 440, amp: 35 };
+
+  // Web Audio API の初期化（ユーザー操作時に生成）
+  let audioCtx = null;
+
+  function playTone(freq, gainValue) {
+    if (isMuted) return;
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'triangle'; // 弦楽器に近い温かみのある三角波
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+      // 弦をはじいたときの減衰音（アタック〜ディケイ）
+      const now = audioCtx.currentTime;
+      const peakGain = Math.min(0.8, (gainValue / 100) * 0.5);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 1.25);
+    } catch (e) {
+      console.warn("Web Audio API not supported", e);
+    }
+  }
+
+  // 物理計算（振動数と振幅）
+  function calcSoundPhysics() {
+    // 基準周波数: 440 Hz (ラ・A4)
+    // 振動数 f ∝ 1/L * √(T/ρ)
+    const thicknessFactor = stringThickness === "thin" ? 1.0 : 0.7; // 太い弦は低い
+    const lengthFactor = 50 / stringLength;                         // 短いほど高い
+    const tensionFactor = Math.sqrt(stringTension / 50);            // 強く張るほど高い
+
+    const frequency = Math.round(440 * thicknessFactor * lengthFactor * tensionFactor);
+    const amplitude = Math.round((pluckStrength / 50) * 35); // ピクセルの振幅
+
+    return { frequency, amplitude };
+  }
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
     <div class="ctrl-group">
-      <label>弦の長さ: <span id="lenVal" class="ctrl-val">${len}%</span></label>
-      <input type="range" id="lenRange" min="20" max="100" value="${len}">
+      <label>1. 弦の太さ:</label>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-action ${stringThickness==='thin'?'':'secondary'}" id="bThin">細い弦（高音）</button>
+        <button class="btn-action ${stringThickness==='thick'?'':'secondary'}" id="bThick">太い弦（低音）</button>
+      </div>
     </div>
     <div class="ctrl-group">
-      <label>弦の張り (強さ): <span id="tenVal" class="ctrl-val">${tension}%</span></label>
-      <input type="range" id="tenRange" min="20" max="100" value="${tension}">
+      <label>2. ことじの位置（弦の長さ）: <span id="lenVal" class="ctrl-val">${stringLength}%</span></label>
+      <input type="range" id="lenRange" min="25" max="100" value="${stringLength}">
     </div>
     <div class="ctrl-group">
-      <label>弦をはじく:</label>
-      <button class="btn-action" id="btnPluck">音を鳴らす 🎵</button>
+      <label>3. 弦の張り（おもりの重さ）: <span id="tenVal" class="ctrl-val">${stringTension}%</span></label>
+      <input type="range" id="tenRange" min="20" max="100" value="${stringTension}">
+    </div>
+    <div class="ctrl-group">
+      <label>4. はじく強さ（音の大きさ）: <span id="strVal" class="ctrl-val">${pluckStrength}%</span></label>
+      <input type="range" id="strRange" min="20" max="100" value="${pluckStrength}">
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px;">
+      <button class="btn-action" id="btnPluck" style="flex: 2; font-size:15px;">🎵 弦をはじいて音を鳴らす！</button>
+      <button class="btn-action secondary" id="btnSetBase" style="flex: 1;">現在の波形を基準に保存</button>
+      <button class="btn-action secondary" id="btnMute" style="flex: 1;">${isMuted?'🔇 ミュート中':'🔊 音声ON'}</button>
     </div>
   `;
 
+  document.getElementById('bThin').onclick = () => {
+    stringThickness = "thin";
+    updateButtons();
+    updateStatus();
+  };
+  document.getElementById('bThick').onclick = () => {
+    stringThickness = "thick";
+    updateButtons();
+    updateStatus();
+  };
   document.getElementById('lenRange').oninput = (e) => {
-    len = parseInt(e.target.value);
-    document.getElementById('lenVal').textContent = `${len}%`;
+    stringLength = parseInt(e.target.value);
+    document.getElementById('lenVal').textContent = `${stringLength}%`;
+    updateStatus();
   };
   document.getElementById('tenRange').oninput = (e) => {
-    tension = parseInt(e.target.value);
-    document.getElementById('tenVal').textContent = `${tension}%`;
+    stringTension = parseInt(e.target.value);
+    document.getElementById('tenVal').textContent = `${stringTension}%`;
+    updateStatus();
   };
+  document.getElementById('strRange').oninput = (e) => {
+    pluckStrength = parseInt(e.target.value);
+    document.getElementById('strVal').textContent = `${pluckStrength}%`;
+    updateStatus();
+  };
+
   document.getElementById('btnPluck').onclick = () => {
     isPlucked = true;
-    setTimeout(() => { isPlucked = false; }, 1800);
+    const { frequency, amplitude } = calcSoundPhysics();
+    playTone(frequency, pluckStrength);
+    setTimeout(() => { isPlucked = false; }, 1200);
+    updateStatus();
   };
 
-  function loop() {
-    t += 0.2;
+  document.getElementById('btnSetBase').onclick = () => {
+    const { frequency, amplitude } = calcSoundPhysics();
+    savedBaseline = { freq: frequency, amp: amplitude };
+    setStatus(`【基準波形を更新】振動数 ${frequency} Hz / 振幅 ${amplitude} を黄色の破線で保存しました。他の条件と波の数や高さを比べてみましょう！`);
+  };
+
+  document.getElementById('btnMute').onclick = () => {
+    isMuted = !isMuted;
+    const btn = document.getElementById('btnMute');
+    btn.textContent = isMuted ? '🔇 ミュート中' : '🔊 音声ON';
+    btn.className = `btn-action ${isMuted?'secondary':''}`;
+  };
+
+  function updateButtons() {
+    document.getElementById('bThin').className = `btn-action ${stringThickness==='thin'?'':'secondary'}`;
+    document.getElementById('bThick').className = `btn-action ${stringThickness==='thick'?'':'secondary'}`;
+  }
+
+  function updateStatus() {
+    const { frequency, amplitude } = calcSoundPhysics();
+    const pitchDesc = frequency >= 550 ? "【高い音】" : (frequency <= 350 ? "【低い音】" : "【中くらいの音】");
+    const volDesc = amplitude >= 40 ? "【大きい音】" : "【小さい音】";
+
+    let ruleNotes = [];
+    if (stringThickness === "thin") ruleNotes.push("弦が細い");
+    if (stringLength <= 40) ruleNotes.push("弦が短い");
+    if (stringTension >= 70) ruleNotes.push("張りが強い");
+
+    let ruleMsg = ruleNotes.length > 0 ? `（高音の条件: ${ruleNotes.join('・')}）` : "";
+
+    setStatus(`振動数: ${frequency} Hz ${pitchDesc} ／ 振幅: ${amplitude} ${volDesc} ${ruleMsg}。オシロスコープの「波の数（振動数）」と「波の高さ（振幅）」を確認しましょう！`);
+  }
+  updateStatus();
+
+  function render() {
+    animTime += 0.25;
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#090d16";
+    ctx.fillStyle = "#0a0f1d";
     ctx.fillRect(0, 0, w, h);
 
-    const freq = (120 - len) * 0.05 * (tension/50);
-    const amp = isPlucked ? 40 : 2;
+    const { frequency, amplitude } = calcSoundPhysics();
 
-    ctx.strokeStyle = "#10b981";
-    ctx.lineWidth = 3;
+    // ========================================================
+    // 上半分：モノコード本体（木製共鳴箱、弦、ことじ、おもり）
+    // ========================================================
+    const monoX = 50, monoY = 25, monoW = w - 100, monoH = 65;
+
+    // 木の共鳴箱
+    ctx.fillStyle = "#78350f";
+    ctx.fillRect(monoX, monoY + 15, monoW, monoH - 15);
+    ctx.fillStyle = "#92400e";
+    ctx.fillRect(monoX + 4, monoY + 19, monoW - 8, monoH - 23);
+
+    // 左端の固定具（ピラー）
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(monoX + 8, monoY + 2, 12, 25);
+
+    // 右端の滑車
+    ctx.fillStyle = "#64748b";
     ctx.beginPath();
-    for (let x=0; x<w; x+=4) {
-      const y = h/2 + Math.sin((x*0.04 * freq) + t*5) * amp;
-      if (x===0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    ctx.arc(monoX + monoW - 15, monoY + 15, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 移動することじ（駒）
+    // stringLength (25〜100%) に応じてX位置が変化
+    const usableWidth = monoW - 90;
+    const bridgeX = monoX + 25 + (usableWidth * (stringLength / 100));
+    const bridgeY = monoY + 14;
+
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.moveTo(bridgeX, bridgeY - 12);
+    ctx.lineTo(bridgeX - 10, bridgeY + 8);
+    ctx.lineTo(bridgeX + 10, bridgeY + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "10px sans-serif";
+    ctx.fillText("ことじ", bridgeX - 12, bridgeY + 20);
+
+    // 弦（左端 〜 ことじ 〜 右端滑車）
+    const stringThickPx = stringThickness === "thin" ? 2 : 4.5;
+    const vibrateOffset = isPlucked ? Math.sin(animTime * 3) * (pluckStrength * 0.08) : 0;
+
+    // 振動する部分（左端〜ことじ）
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = stringThickPx;
+    ctx.beginPath();
+    ctx.moveTo(monoX + 14, monoY + 6);
+    ctx.lineTo((monoX + 14 + bridgeX) / 2, monoY + 6 + vibrateOffset);
+    ctx.lineTo(bridgeX, monoY + 2);
+    ctx.stroke();
+
+    // 振動しない部分（ことじ〜滑車）
+    ctx.beginPath();
+    ctx.moveTo(bridgeX, monoY + 2);
+    ctx.lineTo(monoX + monoW - 15, monoY + 6);
+    // 滑車からぶら下がる弦とおもり
+    ctx.lineTo(monoX + monoW - 3, monoY + 15);
+    ctx.lineTo(monoX + monoW - 3, monoY + 65);
+    ctx.stroke();
+
+    // 弦の張りを表すおもり（重さに応じて個数や大きさが変化）
+    const weightCount = Math.max(1, Math.round(stringTension / 25));
+    ctx.fillStyle = "#475569";
+    for (let i = 0; i < weightCount; i++) {
+      ctx.fillRect(monoX + monoW - 13, monoY + 65 + i * 14, 20, 11);
+      ctx.strokeStyle = "#1e293b";
+      ctx.strokeRect(monoX + monoW - 13, monoY + 65 + i * 14, 20, 11);
+    }
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(`おもり×${weightCount}`, monoX + monoW - 48, monoY + 80);
+
+    // ========================================================
+    // 下半分：オシロスコープ画面（マス目方眼＆波形描画）
+    // ========================================================
+    const oscX = 50, oscY = monoY + monoH + 45;
+    const oscW = w - 100, oscH = h - oscY - 20;
+    const oscCenterY = oscY + oscH / 2;
+
+    // オシロスコープ外枠
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(oscX, oscY, oscW, oscH);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(oscX, oscY, oscW, oscH);
+
+    // 方眼目盛り（グリッド線：横軸時間、縦軸振幅）
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.45)";
+    ctx.lineWidth = 1;
+    const gridSize = 24;
+    for (let x = oscX; x <= oscX + oscW; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, oscY);
+      ctx.lineTo(x, oscY + oscH);
+      ctx.stroke();
+    }
+    for (let y = oscY; y <= oscY + oscH; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(oscX, y);
+      ctx.lineTo(oscX + oscW, y);
+      ctx.stroke();
+    }
+
+    // 中心軸（基準ライン）
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.7)";
+    ctx.beginPath();
+    ctx.moveTo(oscX, oscCenterY);
+    ctx.lineTo(oscX + oscW, oscCenterY);
+    ctx.stroke();
+
+    // 画面見出し
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("📊 オシロスコープ波形（横軸: 時間 ／ 縦軸: 振幅）", oscX + 12, oscY + 18);
+
+    // 波形の描画倍率計算
+    // 振動数が高いほど1画面あたりの波の数が増える
+    const waveFreqScale = (frequency / 440) * 0.045;
+    const curAmp = isPlucked ? amplitude : Math.max(4, amplitude * 0.15); // 非発音時もかすかに波形表示
+
+    // 1. 基準波形（保存されたベースライン：黄色の破線）
+    if (savedBaseline) {
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const baseFreqScale = (savedBaseline.freq / 440) * 0.045;
+      for (let x = 0; x < oscW; x += 3) {
+        const y = oscCenterY + Math.sin(x * baseFreqScale) * savedBaseline.amp;
+        if (x === 0) ctx.moveTo(oscX + x, y);
+        else ctx.lineTo(oscX + x, y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(250, 204, 21, 0.8)";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(`基準: ${savedBaseline.freq}Hz (振幅${savedBaseline.amp})`, oscX + oscW - 170, oscY + 18);
+    }
+
+    // 2. 現在のリアルタイム波形（エメラルドグリーン）
+    ctx.strokeStyle = isPlucked ? "#10b981" : "rgba(16, 185, 129, 0.4)";
+    ctx.lineWidth = isPlucked ? 3.5 : 2;
+    ctx.beginPath();
+    for (let x = 0; x < oscW; x += 3) {
+      // isPluckedのときは波が右へ流れるアニメーション
+      const phase = isPlucked ? animTime * 2 : 0;
+      const y = oscCenterY + Math.sin((x * waveFreqScale) + phase) * curAmp;
+      if (x === 0) ctx.moveTo(oscX + x, y);
+      else ctx.lineTo(oscX + x, y);
     }
     ctx.stroke();
 
-    if (isPlucked) {
-      const pitchDesc = freq > 3 ? "高く澄んだ音" : "低く太い音";
-      setStatus(`【発音中】振動数: 約${(freq*110).toFixed(0)} Hz。弦を短く強く張るほど振動数が増え、${pitchDesc}になります！`);
-    } else {
-      setStatus("「音を鳴らす」を押して、波形の振動数（波の細かさ）と振幅（波の高さ）を観察してみましょう。");
-    }
-
-    animId = requestAnimationFrame(loop);
+    animId = requestAnimationFrame(render);
   }
-  loop();
+  render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      if (audioCtx) {
+        audioCtx.close().catch(() => {});
+        audioCtx = null;
+      }
+    }
+  };
 }
 
-// 地層と堆積 (中1・地球)
-function initC1Strata(canvas) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【極限こだわり完全版】地震の波・走時曲線・媒質振動・緊急地震速報 (中1・地球)
+// ===================================================================
+function initC1Earthquake(canvas) {
   const ctx = canvas.getContext('2d');
-  let layers = [];
+
+  // 物理定数（スケール: 1px = 1km）
+  const vP = 7.0;  // P波速度: 7.0 km/s (縦波)
+  const vS = 3.8;  // S波速度: 3.8 km/s (横波)
+  const omoriK = (vP * vS) / (vP - vS); // 大森係数 k ≈ 8.31
+
+  // 震源座標（地下深さ）
+  const focus = { x: 45, y: 155, depth: 35 }; // 地表は y=85
+
+  // 観測地点（地表 y=85 上）
+  const stationA = { name: "地点A (近)", x: 180, y: 85 };
+  const stationB = { name: "地点B (遠)", x: 330, y: 85 };
+
+  // シミュレーション状態
+  let isQuakeActive = false;
+  let quakeTime = 0;       // 地震発生からの経過秒数 (s)
   let animId;
+
+  // 地盤格子の粒子（縦波・横波の可視化用）
+  const groundGrid = [];
+  const gridRows = 6;
+  const gridCols = 32;
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
+      groundGrid.push({
+        baseX: 30 + c * 13,
+        baseY: 98 + r * 14,
+        x: 30 + c * 13,
+        y: 98 + r * 14
+      });
+    }
+  }
+
+  // 地震計波形記録バッファ
+  const seismogramA = [];
+  const seismogramB = [];
 
   const controls = document.getElementById('labControlsArea');
   controls.innerHTML = `
-    <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:10px;">
-      <button class="btn-action" id="bPourL">れきを流し込む (大粒)</button>
-      <button class="btn-action" id="bPourS">砂を流し込む (中粒)</button>
-      <button class="btn-action" id="bPourM">泥を流し込む (小粒)</button>
-      <button class="btn-action secondary" id="bReset">リセット</button>
+    <div class="ctrl-group">
+      <label>1. 地震トリガー & 防災:</label>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-action" id="bQuake" style="flex:2; font-size:14px; background:#ef4444; border-color:#ef4444;">💥 地震を発生させる！</button>
+        <button class="btn-action secondary" id="bReset" style="flex:1;">リセット 🔄</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>2. 観測地点A (近距離): <span id="distAVal" class="ctrl-val">-- km</span></label>
+      <input type="range" id="rangeA" min="110" max="230" value="${stationA.x}">
+    </div>
+    <div class="ctrl-group">
+      <label>3. 観測地点B (遠距離): <span id="distBVal" class="ctrl-val">-- km</span></label>
+      <input type="range" id="rangeB" min="250" max="420" value="${stationB.x}">
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:12px; font-size:12px; background:#0f172a; padding:10px; border-radius:6px; border:1px solid #334155;">
+      <div><span style="color:#38bdf8; font-weight:bold;">● P波 (縦波)</span>: 速度 ${vP.toFixed(1)} km/s（進行方向に伸縮・初期微動）</div>
+      <div><span style="color:#f87171; font-weight:bold;">● S波 (横波)</span>: 速度 ${vS.toFixed(1)} km/s（進行と直角に揺れる・主要動）</div>
+      <div><span style="color:#facc15; font-weight:bold;">● 大森公式</span>: 距離 $D = k \\times t$ （大森係数 $k \\approx ${omoriK.toFixed(1)}$）</div>
     </div>
   `;
 
-  document.getElementById('bPourL').onclick = () => addLayer('れき', '#94a3b8');
-  document.getElementById('bPourS').onclick = () => addLayer('砂', '#fcd34d');
-  document.getElementById('bPourM').onclick = () => addLayer('泥', '#a16207');
-  document.getElementById('bReset').onclick = () => { layers=[]; setStatus("地層をリセットしました。流水に乗って流れてくる土砂を選んで流し込んでみましょう。"); };
-
-  function addLayer(name, color) {
-    if (layers.length > 8) layers.shift();
-    layers.push({ name, color, h: 30 });
-    setStatus(`【堆積】${name}が水底に堆積しました。粒が大きいほど速く沈み、下層に堆積しやすい特徴があります。`);
+  function getDistance(st) {
+    const dx = st.x - focus.x;
+    const dy = st.y - focus.y;
+    return Math.round(Math.sqrt(dx * dx + dy * dy));
   }
+
+  function updateDistances() {
+    const dA = getDistance(stationA);
+    const dB = getDistance(stationB);
+    document.getElementById('distAVal').textContent = `${dA} km`;
+    document.getElementById('distBVal').textContent = `${dB} km`;
+  }
+  updateDistances();
+
+  document.getElementById('rangeA').oninput = (e) => {
+    stationA.x = parseInt(e.target.value);
+    updateDistances();
+    if (!isQuakeActive) resetQuake();
+  };
+  document.getElementById('rangeB').oninput = (e) => {
+    stationB.x = parseInt(e.target.value);
+    updateDistances();
+    if (!isQuakeActive) resetQuake();
+  };
+
+  document.getElementById('bQuake').onclick = () => {
+    resetQuake();
+    isQuakeActive = true;
+    setStatus("【地震発生！】P波（青・縦波）が地盤を伸縮させながら先行し、遅れてS波（赤・横波）が大きな上下動を起こします。右の「走時曲線」と下の「地震計」の連動に注目！");
+  };
+
+  document.getElementById('bReset').onclick = () => {
+    resetQuake();
+    setStatus("リセットしました。地点A・Bのピンやスライダーを動かして「地震を発生させる」を押してください。");
+  };
+
+  function resetQuake() {
+    isQuakeActive = false;
+    quakeTime = 0;
+    seismogramA.length = 0;
+    seismogramB.length = 0;
+    groundGrid.forEach(p => { p.x = p.baseX; p.y = p.baseY; });
+  }
+
+  function updateStatusLive() {
+    const dA = getDistance(stationA);
+    const dB = getDistance(stationB);
+    const durA = (dA / vS - dA / vP).toFixed(1);
+    const durB = (dB / vS - dB / vP).toFixed(1);
+    setStatus(`【観測解析】地点A（${dA}km）初期微動継続時間: ${durA}秒 ／ 地点B（${dB}km）初期微動継続時間: ${durB}秒。★走時曲線グラフの2本の直線幅（横の開き）が、そのまま初期微動継続時間と一致します！`);
+  }
+  updateStatusLive();
+
+  // マウスドラッグで地点ピン操作
+  let draggingStation = null;
+  canvas.onmousedown = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    if (Math.hypot(mx - stationA.x, my - stationA.y) < 18) draggingStation = stationA;
+    else if (Math.hypot(mx - stationB.x, my - stationB.y) < 18) draggingStation = stationB;
+  };
+  window.onmousemove = (e) => {
+    if (!draggingStation) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    draggingStation.x = Math.max(90, Math.min(430, mx));
+    if (draggingStation === stationA) document.getElementById('rangeA').value = stationA.x;
+    if (draggingStation === stationB) document.getElementById('rangeB').value = stationB.x;
+    updateDistances();
+  };
+  window.onmouseup = () => {
+    if (draggingStation) {
+      draggingStation = null;
+      if (!isQuakeActive) updateStatusLive();
+    }
+  };
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
+  function render() {
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    if (isQuakeActive) {
+      quakeTime += 0.08;
+    }
+
+    const groundY = 85;
+    const dA = getDistance(stationA);
+    const dB = getDistance(stationB);
+    const tP_A = dA / vP, tS_A = dA / vS;
+    const tP_B = dB / vP, tS_B = dB / vS;
+
+    const curRP = quakeTime * vP;
+    const curRS = quakeTime * vS;
+
+    // ==========================================
+    // 1. 左上エリア：地層断面＆媒質格子振動
+    // ==========================================
+    const secW = 460;
+    // 地下ブロック
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, groundY, secW, 105);
+
+    // 地表（芝）
+    ctx.fillStyle = "#15803d";
+    ctx.fillRect(0, groundY - 4, secW, 5);
+
+    // 空
+    ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+    ctx.fillRect(0, 0, secW, groundY - 4);
+
+    // 地盤格子の物理振動（P波: 縦波疎密 / S波: 横波上下）
+    groundGrid.forEach(pt => {
+      const dist = Math.hypot(pt.baseX - focus.x, pt.baseY - focus.y);
+      const angle = Math.atan2(pt.baseY - focus.y, pt.baseX - focus.x);
+
+      let dx = 0, dy = 0;
+      if (isQuakeActive) {
+        // S波到達後：進行方向と直角（横方向）に大きくうねる
+        if (curRS >= dist && curRS <= dist + 90) {
+          const sPhase = (curRS - dist) * 0.28;
+          const sAmp = Math.sin(sPhase) * 5.5;
+          // 進行方向と垂直なベクトル (-sin, cos)
+          dx += -Math.sin(angle) * sAmp;
+          dy += Math.cos(angle) * sAmp;
+        }
+        // P波到達後：進行方向に沿って伸縮（疎密波）
+        else if (curRP >= dist && curRP <= dist + 70) {
+          const pPhase = (curRP - dist) * 0.45;
+          const pAmp = Math.sin(pPhase) * 3.2;
+          // 進行方向に沿ったベクトル (cos, sin)
+          dx += Math.cos(angle) * pAmp;
+          dy += Math.sin(angle) * pAmp;
+        }
+      }
+
+      pt.x = pt.baseX + dx;
+      pt.y = pt.baseY + dy;
+
+      ctx.fillStyle = (curRS >= dist) ? "#f87171" : ((curRP >= dist) ? "#38bdf8" : "#475569");
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 震央点
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = "#94a3b8";
+    ctx.beginPath();
+    ctx.moveTo(focus.x, groundY);
+    ctx.lineTo(focus.x, focus.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("震央", focus.x, groundY - 10);
+
+    // 震源
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath();
+    ctx.arc(focus.x, focus.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("震源", focus.x, focus.y + 18);
+
+    // 波面の同心円
+    if (isQuakeActive) {
+      // P波
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(focus.x, focus.y, curRP, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // S波
+      ctx.strokeStyle = "rgba(248, 113, 113, 0.9)";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.arc(focus.x, focus.y, curRS, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 観測点ピン
+    function drawPin(st, color, name, dist) {
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
+      ctx.beginPath();
+      ctx.moveTo(focus.x, focus.y);
+      ctx.lineTo(st.x, st.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(st.x, st.y - 10, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(st.x, st.y - 2);
+      ctx.lineTo(st.x - 3, st.y - 10);
+      ctx.lineTo(st.x + 3, st.y - 10);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(name, st.x, st.y - 22);
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "9px sans-serif";
+      ctx.fillText(`${dist}km`, st.x, st.y - 12);
+    }
+    drawPin(stationA, "#38bdf8", "地点A", dA);
+    drawPin(stationB, "#facc15", "地点B", dB);
+
+    // ==========================================
+    // 2. 緊急地震速報（EEW）アラートボックス
+    // ==========================================
+    const eewX = 10, eewY = 10, eewW = 240, eewH = 65;
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(eewX, eewY, eewW, eewH);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(eewX, eewY, eewW, eewH);
+
+    ctx.textAlign = "left";
+    if (isQuakeActive && quakeTime >= tP_A) {
+      // 速報発令中
+      const remainB = Math.max(0, tS_B - quakeTime).toFixed(1);
+      ctx.fillStyle = "#ea580c";
+      ctx.fillRect(eewX, eewY, eewW, 20);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText("🚨 緊急地震速報（警報）", eewX + 8, eewY + 14);
+
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillStyle = "#facc15";
+      ctx.fillText(`地点B（主要動まで）: あと ${remainB} 秒`, eewX + 8, eewY + 38);
+      ctx.font = "10px sans-serif";
+      ctx.fillStyle = "#cbd5e1";
+      ctx.fillText("※地点AのP波検知により即時発令", eewX + 8, eewY + 54);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(eewX, eewY, eewW, 20);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText("🛡️ 緊急地震速報システム", eewX + 8, eewY + 14);
+      ctx.font = "10px sans-serif";
+      ctx.fillText("震源直近の観測点がP波を検知すると", eewX + 8, eewY + 38);
+      ctx.fillText("遠方へS波到着前のカウントダウンを開始", eewX + 8, eewY + 52);
+    }
+
+    // ==========================================
+    // 3. 右上エリア：入試頻出「走時曲線グラフ」
+    // ==========================================
+    const graphX = secW + 20, graphY = 15;
+    const graphW = w - graphX - 20, graphH = 175;
+
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(graphX, graphY, graphW, graphH);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(graphX, graphY, graphW, graphH);
+
+    // グラフ方眼目盛り
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.45)";
+    ctx.lineWidth = 1;
+    const maxT = 60;   // 横軸: 最大60秒
+    const maxD = 450;  // 縦軸: 最大450km
+
+    for (let t = 0; t <= maxT; t += 10) {
+      const gx = graphX + (t / maxT) * graphW;
+      ctx.beginPath(); ctx.moveTo(gx, graphY); ctx.lineTo(gx, graphY + graphH); ctx.stroke();
+      ctx.fillStyle = "#64748b"; ctx.font = "9px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`${t}s`, gx, graphY + graphH + 12);
+    }
+    for (let d = 0; d <= maxD; d += 100) {
+      const gy = graphY + graphH - (d / maxD) * graphH;
+      ctx.beginPath(); ctx.moveTo(graphX, gy); ctx.lineTo(graphX + graphW, gy); ctx.stroke();
+      ctx.fillStyle = "#64748b"; ctx.textAlign = "right";
+      ctx.fillText(`${d}`, graphX - 4, gy + 3);
+    }
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📈 走時曲線（そうじきょくせん）", graphX + 8, graphY + 16);
+
+    // P波ライン (青)
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(graphX, graphY + graphH);
+    const endPxX = graphX + Math.min(graphW, ((maxD / vP) / maxT) * graphW);
+    const endPxY = graphY + graphH - (maxD / maxD) * graphH;
+    ctx.lineTo(endPxX, endPxY);
+    ctx.stroke();
+
+    // S波ライン (赤)
+    ctx.strokeStyle = "#f87171";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(graphX, graphY + graphH);
+    const endSxX = graphX + Math.min(graphW, ((maxD / vS) / maxT) * graphW);
+    const endSxY = graphY + graphH - (maxD / maxD) * graphH;
+    ctx.lineTo(endSxX, endSxY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8"; ctx.font = "10px sans-serif"; ctx.fillText("P波ライン", endPxX - 45, endPxY + 15);
+    ctx.fillStyle = "#f87171"; ctx.fillText("S波ライン", endSxX - 45, endSxY + 15);
+
+    // 地点A・Bの水平ガイドラインと初期微動継続時間
+    function drawGraphStation(st, color, d, name) {
+      const gy = graphY + graphH - (d / maxD) * graphH;
+      const gxP = graphX + ((d / vP) / maxT) * graphW;
+      const gxS = graphX + ((d / vS) / maxT) * graphW;
+
+      // 水平線
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(graphX, gy);
+      ctx.lineTo(gxS, gy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // P波・S波交点マーカー
+      ctx.fillStyle = "#38bdf8";
+      ctx.beginPath(); ctx.arc(gxP, gy, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#f87171";
+      ctx.beginPath(); ctx.arc(gxS, gy, 3.5, 0, Math.PI * 2); ctx.fill();
+
+      // 初期微動継続時間の両矢印（この2線の幅が継続時間！）
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(gxP, gy); ctx.lineTo(gxS, gy); ctx.stroke();
+
+      const dur = (d / vS - d / vP).toFixed(1);
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${name}: ${dur}s`, (gxP + gxS) / 2, gy - 4);
+    }
+    drawGraphStation(stationA, "#38bdf8", dA, "A");
+    drawGraphStation(stationB, "#facc15", dB, "B");
+
+    // 現在時間バーのスイープ
+    if (isQuakeActive && quakeTime <= maxT) {
+      const curBarX = graphX + (quakeTime / maxT) * graphW;
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(curBarX, graphY); ctx.lineTo(curBarX, graphY + graphH); ctx.stroke();
+    }
+
+    // ==========================================
+    // 4. 下段エリア：2地点のリアルタイム地震計
+    // ==========================================
+    const scopeX = 30, scopeW = w - 60;
+    const scopeH = 80;
+
+    // 地震計A
+    drawSeismoMonitor(scopeX, 215, scopeW, scopeH, "地点Aの地震計（近距離）", stationA, dA, seismogramA, "#38bdf8");
+
+    // 地震計B
+    drawSeismoMonitor(scopeX, 310, scopeW, scopeH, "地点Bの地震計（遠距離）", stationB, dB, seismogramB, "#facc15");
+
+    animId = requestAnimationFrame(render);
+  }
+
+  function drawSeismoMonitor(bx, by, bw, bh, title, station, dist, arr, themeColor) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // 方眼目盛り（1秒＝11px）
+    const timeScale = 11;
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.35)";
+    ctx.lineWidth = 1;
+    for (let x = bx + 55; x <= bx + bw; x += timeScale * 5) {
+      ctx.beginPath(); ctx.moveTo(x, by); ctx.lineTo(x, by + bh); ctx.stroke();
+    }
+    const centerY = by + bh / 2;
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.5)";
+    ctx.beginPath(); ctx.moveTo(bx, centerY); ctx.lineTo(bx + bw, centerY); ctx.stroke();
+
+    ctx.fillStyle = themeColor;
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`📊 ${title} [震源距離: ${dist} km]`, bx + 10, by + 16);
+
+    const tP = dist / vP;
+    const tS = dist / vS;
+
+    if (isQuakeActive) {
+      let disp = 0;
+      if (quakeTime >= tS) {
+        // 主要動 (S波): 振幅大・低周波
+        disp = Math.sin(quakeTime * 12) * 26 + (Math.random() - 0.5) * 7;
+      } else if (quakeTime >= tP) {
+        // 初期微動 (P波): 振幅小・高周波
+        disp = Math.sin(quakeTime * 34) * 6.5 + (Math.random() - 0.5) * 3;
+      }
+      arr.push({ t: quakeTime, val: disp });
+    }
+
+    // 波形
+    if (arr.length > 1) {
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      for (let i = 0; i < arr.length; i++) {
+        const pt = arr[i];
+        const px = bx + 60 + pt.t * timeScale;
+        const py = centerY - pt.val;
+        if (px > bx + bw - 5) break;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.strokeStyle = themeColor;
+      ctx.stroke();
+    }
+
+    // 到達ライン
+    const pxArrival = bx + 60 + tP * timeScale;
+    const sxArrival = bx + 60 + tS * timeScale;
+
+    if (pxArrival < bx + bw - 8) {
+      ctx.strokeStyle = "#38bdf8";
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(pxArrival, by + 18); ctx.lineTo(pxArrival, by + bh); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#38bdf8"; ctx.font = "9px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("P波到達", pxArrival, by + 28);
+    }
+    if (sxArrival < bx + bw - 8) {
+      ctx.strokeStyle = "#f87171";
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(sxArrival, by + 18); ctx.lineTo(sxArrival, by + bh); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#f87171"; ctx.font = "9px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("S波到達", sxArrival, by + 28);
+
+      // 初期微動継続時間の矢印
+      const dur = (tS - tP).toFixed(1);
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pxArrival, by + bh - 14); ctx.lineTo(sxArrival, by + bh - 14); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(pxArrival + 3, by + bh - 17); ctx.lineTo(pxArrival, by + bh - 14); ctx.lineTo(pxArrival + 3, by + bh - 11);
+      ctx.moveTo(sxArrival - 3, by + bh - 17); ctx.lineTo(sxArrival, by + bh - 14); ctx.lineTo(sxArrival - 3, by + bh - 11);
+      ctx.stroke();
+
+      ctx.fillStyle = "#facc15"; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(`初期微動継続時間: ${dur}秒`, (pxArrival + sxArrival) / 2, by + bh - 18);
+    }
+  }
+
+  render();
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      canvas.onmousedown = null;
+      window.onmousemove = null;
+      window.onmouseup = null;
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ========================================================
+// 【確実堆積版】流水の働きと海洋への堆積 (中1・地球)
+// ========================================================
+function initC1Sediment(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  let weather = "normal";   // 'normal'(平常時), 'heavy_rain'(大雨・洪水)
+  let slopeAngle = 18;      // 傾斜 (10〜30度)
+  let streamPos = "up";     // 観察する石: 'up', 'mid', 'down'
+  let animId;
+
+  // 実写石画像 (PNG)
+  const stoneImages = {
+    up: new Image(),
+    mid: new Image(),
+    down: new Image()
+  };
+  stoneImages.up.src = 'stone_up.png';
+  stoneImages.mid.src = 'stone_mid.png';
+  stoneImages.down.src = 'stone_down.png';
+
+  // 堆積層の厚みバッファ (px)
+  const gravelLayer = new Float32Array(1000); // れき層 (河口)
+  const sandLayer   = new Float32Array(1000); // 砂層 (浅瀬)
+  const mudLayer    = new Float32Array(1000); // 泥層 (沖合)
+
+  const particles = [];
+  const maxParticles = 150;
+
+  function spawnParticle() {
+    const isHeavy = weather === "heavy_rain";
+    const rand = Math.random();
+    let type = "sand";
+    if (rand < 0.33) type = "gravel";
+    else if (rand > 0.66) type = "mud";
+
+    const flowSpeed = (isHeavy ? 5.5 : 3.2) * (slopeAngle / 16);
+
+    particles.push({
+      type: type,
+      x: 20 + Math.random() * 20,
+      y: 60 + Math.random() * 15,
+      vx: flowSpeed + Math.random() * 0.6,
+      vy: Math.sin(slopeAngle * Math.PI / 180) * flowSpeed * 0.8,
+      radius: type === "gravel" ? 4.0 : (type === "sand" ? 2.3 : 1.4)
+    });
+  }
+
+  for (let i = 0; i < 50; i++) spawnParticle();
+
+  const controls = document.getElementById('labControlsArea');
+  controls.innerHTML = `
+    <div class="ctrl-group">
+      <label>1. 天候と水量（川の流れ）:</label>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-action ${weather==='normal'?'':'secondary'}" id="bNormal">平常時の流れ（穏やか）</button>
+        <button class="btn-action ${weather==='heavy_rain'?'':'secondary'}" id="bHeavy" style="${weather==='heavy_rain'?'background:#ea580c; border-color:#ea580c;':''}">⚡ 大雨・洪水時（濁流）</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <label>2. 河口スロープの傾斜: <span id="slopeVal" class="ctrl-val">${slopeAngle}°</span></label>
+      <input type="range" id="slopeRange" min="10" max="30" value="${slopeAngle}">
+    </div>
+    <div class="ctrl-group" style="grid-column: 1 / -1;">
+      <label>3. 石の採取地・形状変化（実写写真 .png）:</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-action ${streamPos==='up'?'':'secondary'}" id="sUp">上流の石（角張る・巨礫）</button>
+        <button class="btn-action ${streamPos==='mid'?'':'secondary'}" id="sMid">中流の石（丸みを帯びる）</button>
+        <button class="btn-action ${streamPos==='down'?'':'secondary'}" id="sDown">下流・河口の石（小さく丸い）</button>
+        <button class="btn-action secondary" id="bClear" style="margin-left:auto;">堆積をリセット 🔄</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('bNormal').onclick = () => { weather = 'normal'; updateControlView(); updateStatus(); };
+  document.getElementById('bHeavy').onclick = () => { weather = 'heavy_rain'; updateControlView(); updateStatus(); };
+  document.getElementById('slopeRange').oninput = (e) => {
+    slopeAngle = parseInt(e.target.value);
+    document.getElementById('slopeVal').textContent = `${slopeAngle}°`;
+    updateStatus();
+  };
+  document.getElementById('sUp').onclick = () => { streamPos = 'up'; updateControlView(); updateStatus(); };
+  document.getElementById('sMid').onclick = () => { streamPos = 'mid'; updateControlView(); updateStatus(); };
+  document.getElementById('sDown').onclick = () => { streamPos = 'down'; updateControlView(); updateStatus(); };
+  document.getElementById('bClear').onclick = () => {
+    gravelLayer.fill(0);
+    sandLayer.fill(0);
+    mudLayer.fill(0);
+    particles.length = 0;
+    setStatus("海底の堆積物をクリアしました。");
+  };
+
+  function updateControlView() {
+    const bn = document.getElementById('bNormal');
+    const bh = document.getElementById('bHeavy');
+    bn.className = `btn-action ${weather==='normal'?'':'secondary'}`;
+    bh.className = `btn-action ${weather==='heavy_rain'?'':'secondary'}`;
+    bh.style = weather === 'heavy_rain' ? 'background:#ea580c; border-color:#ea580c;' : '';
+
+    document.getElementById('sUp').className = `btn-action ${streamPos==='up'?'':'secondary'}`;
+    document.getElementById('sMid').className = `btn-action ${streamPos==='mid'?'':'secondary'}`;
+    document.getElementById('sDown').className = `btn-action ${streamPos==='down'?'':'secondary'}`;
+  }
+
+  function updateStatus() {
+    const isHeavy = weather === "heavy_rain";
+    const stoneInfo = streamPos === 'up'
+      ? "【上流の石】割れたばかりでゴツゴツと角張っており、粒も巨大です。"
+      : (streamPos === 'mid' 
+        ? "【中流の石】水流で転がり、ぶつかり合って角が削れて丸みを帯び始めます。"
+        : "【下流の石・砂】角が完全に取れて丸く滑らかになり、粒も小さくなります。");
+
+    if (isHeavy) {
+      setStatus(`【大雨・洪水時】強烈な濁流により、砂やれきが浅瀬を越えて沖合近くまで押し流されています！ ${stoneInfo}`);
+    } else {
+      setStatus(`【粒度分級の法則】手前（河口）に「れき」、中央（浅瀬）に「砂」、奥（沖合）に「泥」がはっきりと分かれて堆積します！各層の盛り上がりを観察しましょう。 ${stoneInfo}`);
+    }
+  }
+  updateStatus();
 
   function render() {
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0369a1";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    let curY = h - 20;
-    layers.forEach(l => {
-      ctx.fillStyle = l.color;
-      ctx.fillRect(w/2 - 140, curY - l.h, 280, l.h);
-      ctx.strokeStyle = "#1e293b";
-      ctx.strokeRect(w/2 - 140, curY - l.h, 280, l.h);
+    const seaStartX = 170;
+    const waterLevelY = 90;
+    const seabedBaseY = h - 110;
+    const slopeEndY = waterLevelY + (slopeAngle * 2.8);
 
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px sans-serif";
-      ctx.fillText(l.name, w/2 - 15, curY - l.h/2 + 4);
-      curY -= l.h;
-    });
+    // 海底基盤ライン
+    function getSeabedY(x) {
+      if (x <= seaStartX) return slopeEndY;
+      const ratio = (x - seaStartX) / (w - seaStartX);
+      return slopeEndY + ratio * (seabedBaseY - slopeEndY);
+    }
+
+    // 海水グラデーション
+    const seaGrad = ctx.createLinearGradient(seaStartX, waterLevelY, w, seabedBaseY);
+    seaGrad.addColorStop(0, "rgba(6, 182, 212, 0.35)");
+    seaGrad.addColorStop(0.5, "rgba(14, 116, 144, 0.5)");
+    seaGrad.addColorStop(1, "rgba(15, 23, 42, 0.85)");
+    ctx.fillStyle = seaGrad;
+    ctx.fillRect(seaStartX, waterLevelY, w - seaStartX - 10, seabedBaseY - waterLevelY);
+
+    // 水面波
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(seaStartX, waterLevelY);
+    for (let x = seaStartX; x < w - 10; x += 15) {
+      const wy = waterLevelY + Math.sin(x * 0.05 + Date.now() * 0.003) * 1.8;
+      ctx.lineTo(x, wy);
+    }
+    ctx.stroke();
+
+    // 河口スロープ
+    ctx.fillStyle = "#334155";
+    ctx.beginPath();
+    ctx.moveTo(15, waterLevelY - 35);
+    ctx.lineTo(seaStartX, slopeEndY);
+    ctx.lineTo(seaStartX, seabedBaseY + 40);
+    ctx.lineTo(15, seabedBaseY + 40);
+    ctx.closePath();
+    ctx.fill();
+
+    // 海底岩盤
+    ctx.fillStyle = "#1e293b";
+    ctx.beginPath();
+    ctx.moveTo(seaStartX, slopeEndY);
+    ctx.lineTo(w - 10, seabedBaseY);
+    ctx.lineTo(w - 10, seabedBaseY + 40);
+    ctx.lineTo(seaStartX, seabedBaseY + 40);
+    ctx.closePath();
+    ctx.fill();
+
+    // ==========================================
+    // 3層の堆積層（積み上げ描画）
+    // ==========================================
+    // 1. 泥の層（暗灰色：一番上まで積もる）
+    ctx.fillStyle = "#64748b";
+    ctx.beginPath();
+    ctx.moveTo(seaStartX, slopeEndY);
+    for (let x = seaStartX; x <= w - 10; x += 3) {
+      const i = Math.floor(x);
+      const totalH = gravelLayer[i] + sandLayer[i] + mudLayer[i];
+      ctx.lineTo(x, getSeabedY(x) - totalH);
+    }
+    ctx.lineTo(w - 10, seabedBaseY);
+    ctx.lineTo(seaStartX, slopeEndY);
+    ctx.closePath();
+    ctx.fill();
+
+    // 2. 砂の層（黄色：れき層＋砂層）
+    ctx.fillStyle = "#eab308";
+    ctx.beginPath();
+    ctx.moveTo(seaStartX, slopeEndY);
+    for (let x = seaStartX; x <= w - 10; x += 3) {
+      const i = Math.floor(x);
+      const gsH = gravelLayer[i] + sandLayer[i];
+      ctx.lineTo(x, getSeabedY(x) - gsH);
+    }
+    ctx.lineTo(w - 10, seabedBaseY);
+    ctx.lineTo(seaStartX, slopeEndY);
+    ctx.closePath();
+    ctx.fill();
+
+    // 3. れきの層（白灰：れき層のみ）
+    ctx.fillStyle = "#cbd5e1";
+    ctx.beginPath();
+    ctx.moveTo(seaStartX, slopeEndY);
+    for (let x = seaStartX; x <= w - 10; x += 3) {
+      const i = Math.floor(x);
+      ctx.lineTo(x, getSeabedY(x) - gravelLayer[i]);
+    }
+    ctx.lineTo(w - 10, seabedBaseY);
+    ctx.lineTo(seaStartX, slopeEndY);
+    ctx.closePath();
+    ctx.fill();
+
+    // ==========================================
+    // 粒子の物理シミュレーションとゾーン着底
+    // ==========================================
+    if (particles.length < maxParticles) {
+      spawnParticle();
+      spawnParticle();
+    }
+
+    const isHeavy = weather === "heavy_rain";
+
+    // 濁水エフェクト
+    ctx.fillStyle = isHeavy ? "rgba(217, 119, 6, 0.45)" : "rgba(56, 189, 248, 0.35)";
+    ctx.beginPath();
+    ctx.moveTo(15, waterLevelY - 20);
+    ctx.lineTo(seaStartX, slopeEndY);
+    ctx.lineTo(seaStartX + (isHeavy ? 280 : 160), slopeEndY + 35);
+    ctx.lineTo(seaStartX, slopeEndY + 15);
+    ctx.closePath();
+    ctx.fill();
+
+    // ゾーンの境界X座標
+    const zoneGravelEnd = seaStartX + (isHeavy ? 180 : 110);
+    const zoneSandEnd   = seaStartX + (isHeavy ? 360 : 250);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+
+      if (p.x < seaStartX) {
+        // スロープ上の滑降
+        p.x += p.vx;
+        p.y += (p.vx * Math.tan(slopeAngle * Math.PI / 180));
+      } else {
+        // 海中での移動
+        if (p.type === "gravel") {
+          // れき：河口で急激に落下
+          p.vx *= 0.94;
+          p.vy += 0.35;
+          p.x += Math.max(0.8, p.vx);
+          p.y += p.vy;
+        } else if (p.type === "sand") {
+          // 砂：河口を飛び越え、浅瀬（中間帯）まで水平に伸びてから落ちる
+          if (p.x < zoneGravelEnd - 30) {
+            p.vy += 0.05; // まだあまり落とさない
+            p.x += Math.max(2.4, p.vx * 0.95);
+          } else {
+            p.vy += 0.22; // 浅瀬に入ったら急降下
+            p.vx *= 0.96;
+            p.x += Math.max(1.2, p.vx);
+          }
+          p.y += p.vy;
+        } else {
+          // 泥：水流と浮力で沖合まで一気に運ばれる
+          if (p.x < zoneSandEnd - 20) {
+            p.vy = (p.vy * 0.8) + 0.02; // 水面近くを浮遊
+            p.x += Math.max(2.8, p.vx);
+          } else {
+            p.vy += 0.18; // 沖合に入ったら確実に底へ沈殿
+            p.vx *= 0.97;
+            p.x += Math.max(1.0, p.vx);
+          }
+          p.y += p.vy;
+        }
+      }
+
+      // 地面・堆積面との当たり判定
+      const curIdx = Math.min(gravelLayer.length - 1, Math.max(0, Math.floor(p.x)));
+      const surfaceY = getSeabedY(p.x) - (gravelLayer[curIdx] + sandLayer[curIdx] + mudLayer[curIdx]);
+
+      // 着底判定
+      if (p.x >= seaStartX && p.y >= surfaceY) {
+        const addWidth = p.type === "gravel" ? 4 : (p.type === "sand" ? 6 : 8);
+        const addAmount = p.type === "gravel" ? 1.0 : (p.type === "sand" ? 0.85 : 0.7);
+
+        for (let d = -addWidth; d <= addWidth; d++) {
+          const idx = curIdx + d;
+          if (idx >= 0 && idx < gravelLayer.length) {
+            const factor = 1 - (Math.abs(d) / (addWidth + 1));
+            if (p.type === "gravel") {
+              if (gravelLayer[idx] < 45) gravelLayer[idx] += addAmount * factor;
+            } else if (p.type === "sand") {
+              if (sandLayer[idx] < 45) sandLayer[idx] += addAmount * factor;
+            } else {
+              if (mudLayer[idx] < 45) mudLayer[idx] += addAmount * factor;
+            }
+          }
+        }
+        particles.splice(i, 1);
+        continue;
+      }
+
+      // 最奥（画面端）に到達した泥粒子の着底処理
+      if (p.x >= w - 15) {
+        const edgeIdx = Math.floor(w - 20);
+        if (mudLayer[edgeIdx] < 45) mudLayer[edgeIdx] += 0.8;
+        particles.splice(i, 1);
+        continue;
+      }
+      if (p.y > h) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      // 粒子の描画
+      ctx.beginPath();
+      if (p.type === "gravel") {
+        ctx.fillStyle = "#f8fafc";
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === "sand") {
+        ctx.fillStyle = "#facc15";
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#94a3b8";
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ==========================================
+    // ゾーンラベルと境界線
+    // ==========================================
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+
+    // れきラベル
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("【河口付近】", seaStartX + 55, seabedBaseY + 20);
+    ctx.fillText("れき層（白灰）", seaStartX + 55, seabedBaseY + 36);
+
+    // 砂ラベル
+    ctx.fillStyle = "#facc15";
+    ctx.fillText("【浅い海】", (zoneGravelEnd + zoneSandEnd) / 2, seabedBaseY + 20);
+    ctx.fillText("砂層（黄）", (zoneGravelEnd + zoneSandEnd) / 2, seabedBaseY + 36);
+
+    // 泥ラベル
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("【深い沖合】", (zoneSandEnd + w - 10) / 2, seabedBaseY + 20);
+    ctx.fillText("泥層（暗灰）", (zoneSandEnd + w - 10) / 2, seabedBaseY + 36);
+
+    // 境界点線
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+    ctx.beginPath();
+    ctx.moveTo(zoneGravelEnd, waterLevelY);
+    ctx.lineTo(zoneGravelEnd, seabedBaseY);
+    ctx.moveTo(zoneSandEnd, waterLevelY);
+    ctx.lineTo(zoneSandEnd, seabedBaseY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 左下：実写石レンズ (.png)
+    drawStoneLens(ctx, 20, h - 90, 68);
 
     animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  function drawStoneLens(ctx, x, y, r) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x + r, y + 10, r * 0.75, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(x, y - 40, r * 2, r * 2);
+
+    const img = stoneImages[streamPos];
+    if (img.complete && img.naturalWidth !== 0) {
+      ctx.drawImage(img, x, y - 35, r * 1.5, r * 1.5);
+    } else {
+      ctx.fillStyle = "#94a3b8";
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 2;
+      const lx = x + r, ly = y + 10;
+      ctx.beginPath();
+      if (streamPos === "up") {
+        ctx.moveTo(lx - 28, ly - 18);
+        ctx.lineTo(lx + 15, ly - 22);
+        ctx.lineTo(lx + 32, ly + 4);
+        ctx.lineTo(lx + 8, ly + 25);
+        ctx.lineTo(lx - 25, ly + 14);
+      } else if (streamPos === "mid") {
+        ctx.ellipse(lx, ly, 28, 19, 0.3, 0, Math.PI * 2);
+      } else {
+        ctx.ellipse(lx, ly, 22, 14, 0, 0, Math.PI * 2);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(x + r, y + 10, r * 0.75, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    const name = streamPos === 'up' ? "上流（角張る）" : (streamPos === 'mid' ? "中流（やや丸い）" : "下流（丸小石・砂）");
+    ctx.fillText(`🔬 ${name}`, x + 5, y - 42);
+  }
+
+  return {
+    destroy: () => cancelAnimationFrame(animId)
+  };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // 炭酸水素ナトリウム熱分解 (中2・物質)
 function initC2Heat(canvas) {
