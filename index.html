@@ -6987,562 +6987,5794 @@ function initC2Digestion(canvas) {
 
 
 
-// 雲のでき方 (中2・地球)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【配置・重なり完全解消版】雲のでき方と断熱膨張 (中2・地球)
+// ===================================================================
 function initC2Cloud(canvas) {
   const ctx = canvas.getContext('2d');
-  let pressure = 1;
-  let smoke = true;
-  let cloudOpacity = 0;
+
+  // --- 実験状態 ---
+  let hasSmoke = true;         // 線香の煙（凝結核）を入れたか
+  let hasWater = true;         // 水（またはエタノール）を数滴入れたか
+  let pressure = 1.0;          // 気圧 (atm: 1.0 〜 2.4)
+  let temperature = 20.0;      // 内部気温 (℃)
+  const dewPoint = 16.5;       // 露点 (℃)
+  let cloudDensity = 0.0;      // 雲（霧）の白濁度 (0.0 〜 1.0)
+  let isPopped = false;        // 栓が抜けたか
   let animId;
+  let vaporTick = 0;
+
+  // 実写写真・警告画像の読み込み
+  const cloudImages = {
+    clear: new Image(),
+    foggy: new Image(),
+    micro: new Image(),
+    danger: new Image()
+  };
+  cloudImages.clear.src = 'cloud_flask_clear.jpg';
+  cloudImages.foggy.src = 'cloud_flask_foggy.jpg';
+  cloudImages.micro.src = 'cloud_aerosol_micro.jpg';
+  cloudImages.danger.src = 'danger_stopper_flying.jpg';
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>空気ポンプで加圧: <span id="pVal" class="ctrl-val">${pressure} 気圧</span></label>
-      <button class="btn-action" id="bPump">シュポシュポ加圧する ＋</button>
-    </div>
-    <div class="ctrl-group">
-      <label>ゴム栓を一気に抜く (断熱膨張):</label>
-      <button class="btn-action secondary" id="bPop">栓を抜く！ 💨</button>
-    </div>
-  `;
 
-  document.getElementById('bPump').onclick = () => {
-    if (pressure < 3) pressure += 0.5;
-    cloudOpacity = 0;
-    document.getElementById('pVal').textContent = `${pressure} 気圧`;
-    setStatus("フラスコ内に空気を送り込みました。内部の温度がわずかに上昇しています。");
-  };
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. フラスコ内の下準備（対照条件）:</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <button class="btn-action ${hasSmoke?'':'secondary'}" id="bSmoke" style="padding:6px; font-size:12px;">
+            ${hasSmoke ? '線香の煙: 入れた 💨' : '線香の煙: なし'}
+          </button>
+          <button class="btn-action ${hasWater?'':'secondary'}" id="bWater" style="padding:6px; font-size:12px;">
+            ${hasWater ? '水滴(水蒸気): 入れた 💧' : '水滴: なし(乾燥)'}
+          </button>
+        </div>
+      </div>
 
-  document.getElementById('bPop').onclick = () => {
-    if (pressure > 1.2) {
-      cloudOpacity = smoke ? 0.85 : 0.25;
-      pressure = 1;
-      document.getElementById('pVal').textContent = `1 気圧`;
-      setStatus("【断熱膨張！】気圧が急激に下がって気温が露点以下になり、線香の煙を凝結核として白く霧（雲）が発生しました！");
-    } else {
-      setStatus("まずポンプで十分に加圧してから栓を抜いてみましょう。");
+      <div class="ctrl-group">
+        <label>2. 簡易ポンプで加圧（圧縮）: <span id="pVal" class="ctrl-val" style="color:#38bdf8; font-weight:bold;">${pressure.toFixed(2)} atm</span></label>
+        <button class="btn-action" id="bPump" style="padding:8px; font-size:13px; width:100%;">
+          ポンプをシュポシュポ押す (加圧) ➕
+        </button>
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. ゴム栓を一気に開放（断熱膨張）:</label>
+        <button class="btn-action ${pressure > 1.2 ? '' : 'secondary'}" id="bPop" style="${pressure > 1.2 ? 'background:#ea580c; border-color:#ea580c;' : ''} padding:8px; font-size:13px; width:100%;">
+          ゴム栓を一気に抜く！ 💨
+        </button>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bDangerStopper" style="flex:2; color:#ef4444; border-color:#ef4444; font-size:12px; padding:6px;">
+          ⚠️ 安全指導: ゴム栓暴発事故と正しい対策
+        </button>
+        <button class="btn-action secondary" id="bResetCloud" style="flex:1; font-size:12px; padding:6px;">
+          リセット 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('bSmoke').onclick = () => {
+      hasSmoke = !hasSmoke;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bWater').onclick = () => {
+      hasWater = !hasWater;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bPump').onclick = () => {
+      if (pressure < 2.4) {
+        pressure += 0.35;
+        temperature += 1.1; // 圧縮熱で昇温
+        cloudDensity = Math.max(0, cloudDensity - 0.4); // 加圧すると消える
+        isPopped = false;
+        renderControls();
+        updateStatus();
+      }
+    };
+
+    document.getElementById('bPop').onclick = () => {
+      if (pressure <= 1.1) {
+        setStatus("まずポンプを押して十分に加圧（1.5気圧以上）してください。", true);
+        return;
+      }
+      isPopped = true;
+      const dropTemp = (pressure - 1.0) * 8.0; // 断熱膨張による急激な温度降下
+      temperature = Math.max(9.0, temperature - dropTemp);
+      pressure = 1.0;
+
+      // 白濁度の計算（煙あり＋水蒸気ありで極めて濃く曇る）
+      if (temperature <= dewPoint) {
+        if (hasWater) {
+          if (hasSmoke) {
+            cloudDensity = 0.90; // 濃い雲
+          } else {
+            cloudDensity = 0.25; // 核がないのでうっすら
+          }
+        } else {
+          cloudDensity = 0.05; // 水蒸気不足
+        }
+      }
+
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bDangerStopper').onclick = showStopperModal;
+    document.getElementById('bResetCloud').onclick = resetLab;
+  }
+
+  function showStopperModal() {
+    setStatus("【ゴム栓暴発警告！】加圧しすぎると突然ゴム栓が吹き飛び、顔や目を直撃する恐れがあります！", true);
+
+    let modal = document.getElementById('stopperWarningModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'stopperWarningModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.88)';
+    modal.style.zIndex = '9999';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.padding = '20px';
+    modal.style.cursor = 'pointer';
+
+    const card = document.createElement('div');
+    card.style.background = '#0f172a';
+    card.style.border = '2px solid #ef4444';
+    card.style.borderRadius = '14px';
+    card.style.maxWidth = '580px';
+    card.style.width = '90%';
+    card.style.padding = '22px';
+    card.style.boxShadow = '0 0 35px rgba(239, 68, 68, 0.6)';
+    card.style.textAlign = 'center';
+    card.style.color = '#ffffff';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = '🚨 【安全指導】ゴム栓の暴発事故を防ぐ3大ポイント';
+    h2.style.color = '#ef4444';
+    h2.style.fontSize = '18px';
+    h2.style.marginBottom = '12px';
+    card.appendChild(h2);
+
+    if (cloudImages.danger.complete && cloudImages.danger.naturalWidth !== 0) {
+      const img = document.createElement('img');
+      img.src = cloudImages.danger.src;
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '230px';
+      img.style.borderRadius = '8px';
+      img.style.marginBottom = '12px';
+      card.appendChild(img);
     }
-  };
 
-  function loop() {
+    const desc = document.createElement('div');
+    desc.style.fontSize = '13px';
+    desc.style.lineHeight = '1.7';
+    desc.style.textAlign = 'left';
+    desc.style.background = '#1e293b';
+    desc.style.padding = '14px';
+    desc.style.borderRadius = '8px';
+    desc.style.color = '#f1f5f9';
+    desc.innerHTML = `
+      <strong style="color:#facc15;">★ なぜ危険か？</strong><br>
+      ポンプで空気を入れると内部気圧が上がり、ゴム栓を押し出す力が強くかかります。突然外れると弾丸のように飛び跳ねて失明や打撲の原因になります。<br><br>
+      <strong style="color:#38bdf8;">★ 教科書準拠の安全対策（入試必出）：</strong><br>
+      ① <strong>手のひらや手袋をした手で、ゴム栓の上を軽く押さえながら</strong>加圧する。<br>
+      ② フラスコの口を<strong>絶対に人のいる方向に向けない</strong>。<br>
+      ③ 線香の煙は<strong>「ほんの少し（1〜2すじ）」</strong>だけ入れる（入れすぎると単なる煙で中が見えなくなります）。
+    `;
+    card.appendChild(desc);
+
+    const tip = document.createElement('p');
+    tip.textContent = 'クリックすると閉じて実験に戻ります';
+    tip.style.fontSize = '12px';
+    tip.style.color = '#94a3b8';
+    tip.style.marginTop = '12px';
+    card.appendChild(tip);
+
+    modal.appendChild(card);
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  }
+
+  function resetLab() {
+    pressure = 1.0;
+    temperature = 20.0;
+    cloudDensity = 0.0;
+    isPopped = false;
+    hasSmoke = true;
+    hasWater = true;
+    const modal = document.getElementById('stopperWarningModal');
+    if (modal) modal.remove();
+    renderControls();
+    updateStatus();
+  }
+
+  function updateStatus() {
+    if (!isPopped) {
+      if (pressure > 1.2) {
+        setStatus(`【加圧中: ${pressure.toFixed(2)}気圧 / 内部温度: ${temperature.toFixed(1)}℃】空気を圧縮したため温度が少し上昇しています。栓を一気に抜いてみましょう！`);
+      } else {
+        setStatus("フラスコ内の準備が整いました。ポンプを押して十分に加圧してください。");
+      }
+      return;
+    }
+
+    if (cloudDensity > 0.7) {
+      setStatus(`【雲の発生（断熱膨張成功！）】気圧急降下に伴い温度が${temperature.toFixed(1)}℃まで低下（露点${dewPoint}℃以下）。線香の煙を『凝結核』として、水蒸気が一気に水滴へ凝結し、真っ白な濃い霧（雲）が生まれました！`);
+    } else if (cloudDensity > 0.1) {
+      setStatus(`【凝結核なしの比較】温度は${temperature.toFixed(1)}℃まで下がりましたが、線香の煙（凝結核）が入っていないため、水蒸気が凝結しにくく、うっすらと白くなる程度にとどまりました。（凝結核の重要性の証明）`);
+    } else {
+      setStatus(`【水蒸気不足】温度は${temperature.toFixed(1)}℃まで下がりましたが、フラスコ内が乾燥しているため雲は発生しませんでした。水滴を入れて試してみましょう。`);
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
+  function render() {
+    vaporTick += 0.04;
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    const cx = w/2, cy = h/2;
+    const leftW = w - 240;
+
+    // 1. 実験フラスコベンチ（左側）
+    drawFlaskBench(leftW, h);
+
+    // 2. 右側パネル（実写写真枠 & 気象プロセスまとめ表）
+    const rightX = w - 230, rightW = 215;
+    drawPhotoPreviewBox(rightX, 15, rightW, 140);
+    drawCloudProcessTable(rightX, 165, rightW, h - 180);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  // ========================================================
+  // A. 実験フラスコベンチ（位置関係の被りを徹底解消）
+  // ========================================================
+  function drawFlaskBench(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    // 見出し（もっと上の Y=28 に）
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("☁️ 雲のでき方と断熱膨張シミュレーター", 28, 28);
+
+    // フラスコの中心・サイズを下方へシフトしてゆとりを確保
+    const flaskCX = bw / 2 - 25;
+    const flaskCY = bh / 2 + 10; // 少し下げて上部の余白に
+    const flaskR = 65;           // 半径をコンパクトにして重なりを解消
+
+    // フラスコの首 (Y=30のメインロゴに絶対に被らない位置に配置)
+    ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+    ctx.fillRect(flaskCX - 18, flaskCY - flaskR - 40, 36, 45);
     ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(flaskCX - 18, flaskCY - flaskR - 40, 36, 45);
+
+    // フラスコ球体
     ctx.beginPath();
-    ctx.arc(cx, cy+20, 80, 0, Math.PI*2);
+    ctx.arc(flaskCX, flaskCY, flaskR, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(56, 189, 248, 0.06)";
+    ctx.fill();
     ctx.stroke();
 
-    if (cloudOpacity > 0.05) {
-      ctx.fillStyle = `rgba(255, 255, 255, ${cloudOpacity})`;
+    // 白濁（雲）エフェクト
+    if (cloudDensity > 0.02) {
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(cx, cy+20, 75, 0, Math.PI*2);
+      ctx.arc(flaskCX, flaskCY, flaskR - 3, 0, Math.PI * 2);
+      ctx.clip();
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${cloudDensity})`;
+      ctx.fillRect(flaskCX - flaskR, flaskCY - flaskR, flaskR * 2, flaskR * 2);
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.75, cloudDensity * 0.85)})`;
+      for (let i = 0; i < 7; i++) {
+        const cx = flaskCX + Math.sin(vaporTick + i) * 25;
+        const cy = flaskCY + Math.cos(vaporTick * 0.8 + i) * 25;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 底部の水滴
+    if (hasWater) {
+      ctx.fillStyle = "rgba(14, 165, 233, 0.35)";
+      ctx.beginPath();
+      ctx.arc(flaskCX, flaskCY, flaskR - 3, Math.PI * 0.25, Math.PI * 0.75);
       ctx.fill();
     }
 
-    animId = requestAnimationFrame(loop);
-  }
-  loop();
+    // 線香の煙（微小粒子）
+    if (hasSmoke && cloudDensity < 0.3) {
+      ctx.fillStyle = "rgba(203, 213, 225, 0.45)";
+      for (let i = 0; i < 12; i++) {
+        const sx = flaskCX - 22 + (i * 12345 % 44);
+        const sy = flaskCY - 30 + (i * 54321 % 60);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+    // ゴム栓
+    const stopperY = flaskCY - flaskR - 50;
+    if (!isPopped) {
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(flaskCX - 17, stopperY, 34, 12);
+      ctx.strokeStyle = "#94a3b8";
+      ctx.strokeRect(flaskCX - 17, stopperY, 34, 12);
+    } else {
+      // Y=35のタイトルロゴに被らないよう、飛び出し高さを最大20px程度に制限
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(flaskCX - 16, stopperY - 14, 32, 10);
+      ctx.fillStyle = "#ea580c";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("ポンッ！💨", flaskCX, stopperY - 20);
+    }
+
+    // ポンプとホース (美しく横に逃がす)
+    const pumpX = 35, pumpY = bh - 72;
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(flaskCX, stopperY + 6);
+    ctx.quadraticCurveTo(pumpX + 10, stopperY - 5, pumpX + 22, pumpY);
+    ctx.stroke();
+
+    // 簡易空気入れポンプ
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(pumpX, pumpY - 15, 45, 30);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(pumpX, pumpY - 15, 45, 30);
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("空気ポンプ", pumpX + 22, pumpY + 4);
+
+    // デジタル計器パネル（内部温度・気圧：右上に設置）
+    const meterX = bw - 135, meterY = 42, meterW = 105, meterH = 100;
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(meterX, meterY, meterW, meterH);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(meterX, meterY, meterW, meterH);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("内部計測器", meterX + meterW / 2, meterY + 13);
+
+    // 内部温度
+    ctx.fillStyle = temperature <= dewPoint ? "#38bdf8" : (temperature > 22 ? "#ef4444" : "#facc15");
+    ctx.font = "bold 14px monospace";
+    ctx.fillText(`${temperature.toFixed(1)} ℃`, meterX + meterW / 2, meterY + 38);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "8px sans-serif";
+    ctx.fillText(`(露点: ${dewPoint}℃)`, meterX + meterW / 2, meterY + 50);
+
+    // 内部気圧
+    ctx.fillStyle = pressure > 1.2 ? "#ea580c" : "#e2e8f0";
+    ctx.font = "bold 13px monospace";
+    ctx.fillText(`${pressure.toFixed(2)} atm`, meterX + meterW / 2, meterY + 76);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "8px sans-serif";
+    ctx.fillText("内部気圧", meterX + meterW / 2, meterY + 86);
+
+    // 下部：断熱膨張ステップ解説バー（見切れを防ぐため２段に分けて描画、マージンにゆとり）
+    drawStepGuideBar(35, bh - 68, bw - 60, 42);
+  }
+
+  function drawStepGuideBar(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📝 雲発生のプロセス（入試頻出）：", bx + 8, by + 12);
+
+    // 一行あたりの文字数を削減し、左右の衝突・はみ出しを解消
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("①気圧低下（上昇気流） ➔ ②断熱膨張 ➔ ③気温降下", bx + 8, by + 24);
+    ctx.fillText("➔ ④露点に達する ➔ ⑤水蒸気が水滴に『凝結』して雲になる", bx + 8, by + 34);
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawPhotoPreviewBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: フラスコ内部", bx + 8, by + 16);
+
+    let targetImg = cloudImages.clear;
+    let label = "加圧中（透明・澄んだ空気）";
+
+    if (cloudDensity > 0.6) {
+      targetImg = cloudImages.foggy;
+      label = "減圧直後（濃い雲の発生）";
+    } else if (cloudDensity > 0.1) {
+      targetImg = cloudImages.clear;
+      label = "凝結核なし（わずかに曇る程度）";
+    }
+
+    if (targetImg && targetImg.complete && targetImg.naturalWidth !== 0) {
+      ctx.drawImage(targetImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("写真読み込み中...", bx + bw / 2, by + bh / 2 + 5);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 18, bw - 16, 14);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：対照実験＆気象まとめ表
+  // ========================================================
+  function drawCloudProcessTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 対照実験の結果と記述ポイント", bx + 8, by + 16);
+
+    const rows = [
+      { name: "線香の煙あり", result: "真っ白に濃く曇る", note: "凝結核があるため" },
+      { name: "線香の煙なし", result: "うっすら曇るのみ", note: "水滴が集まりにくい" },
+      { name: "栓を開いた時", result: "温度が急低下",     note: "断熱膨張による" },
+      { name: "加圧した時",   result: "曇りが消える",     note: "圧縮昇温による" }
+    ];
+
+    ctx.font = "10px sans-serif";
+    rows.forEach((r, idx) => {
+      const iy = by + 34 + idx * 25;
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.textAlign = "left";
+      ctx.fillText(`・${r.name}:`, bx + 6, iy);
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText(r.result, bx + 80, iy);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "8px sans-serif";
+      ctx.fillText(`(${r.note})`, bx + 10, iy + 10);
+      ctx.font = "10px sans-serif";
+    });
+
+    // 記述対策ボックス（タイトルの文字切れを防ぐための Y軸 & 囲み 調整）
+    const footY = by + bh - 44;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 38);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【記述対策】線香の煙を入れる理由：", bx + 10, footY + 12);
+    ctx.fillStyle = "#cbd5e1";
+    // 枠内で確実に2行で収める
+    ctx.fillText("水蒸気が水滴に変わる際の「核」", bx + 10, footY + 22);
+    ctx.fillText("（凝結核）にするため。", bx + 10, footY + 31);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('stopperWarningModal');
+      if (modal) modal.remove();
+    }
+  };
 }
 
-// 電流と磁界 (中2・エネルギー)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【物理演算・フレミング左手完全修正版】電流と磁界 (中2・エネルギー)
+// ===================================================================
 function initC2Magnet(canvas) {
   const ctx = canvas.getContext('2d');
-  let currentDir = 1;
-  let nOnTop = true;
+
+  // --- 実験状態 ---
+  let currentDir = 1;          // 1: 手前➔奥, -1: 奥➔手前
+  let nOnTop = true;           // true: 上がN極(磁界は下向き), false: 上がS極(磁界は上向き)
+  let volt = 4.0;              // 電圧 (0.0 〜 10.0 V)
+  let magnetStrength = 1;      // 磁石の数: 1 または 2
+  let isPowerOn = true;        // 通電スイッチ
   let animId;
+  let tick = 0;
+
+  // ブランコの物理シミュレーション（減衰振動）
+  let swingPos = 0.0;
+  let swingVel = 0.0;
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>電流の向き:</label>
-      <button class="btn-action" id="bCurrent">電流を反転 (${currentDir>0?'手前→奥':'奥→手前'})</button>
-    </div>
-    <div class="ctrl-group">
-      <label>U字形磁石の極:</label>
-      <button class="btn-action secondary" id="bPole">磁石を反転 (${nOnTop?'上がN極':'上がS極'})</button>
-    </div>
-  `;
 
-  document.getElementById('bCurrent').onclick = () => {
-    currentDir *= -1;
-    document.getElementById('bCurrent').textContent = `電流を反転 (${currentDir>0?'手前→奥':'奥→手前'})`;
-    updateStatus();
-  };
-  document.getElementById('bPole').onclick = () => {
-    nOnTop = !nOnTop;
-    document.getElementById('bPole').textContent = `磁石を反転 (${nOnTop?'上がN極':'上がS極'})`;
-    updateStatus();
-  };
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 電源の操作:</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <button class="btn-action ${isPowerOn?'':'secondary'}" id="bPower" style="${isPowerOn?'background:#0d9488; border-color:#0d9488;':''}">
+            ${isPowerOn ? '通電中 (ON) ⚡' : 'スイッチOFF'}
+          </button>
+          <button class="btn-action secondary" id="bCurDir">
+            電流反転: ${currentDir > 0 ? '手前 ➔ 奥' : '奥 ➔ 手前'}
+          </button>
+        </div>
+      </div>
 
-  function updateStatus() {
-    const force = currentDir * (nOnTop ? 1 : -1);
-    setStatus(`【フレミングの左手の法則】導線ブランコに【${force>0?'右向き':'左向き'}】の力が働き、大きく振れました！`);
+      <div class="ctrl-group">
+        <label>2. 電圧 (電流の強さ): <span id="vVal" class="ctrl-val" style="color:#38bdf8; font-weight:bold;">${volt.toFixed(1)} V</span></label>
+        <input type="range" id="vRange" min="0" max="100" value="${Math.round(volt * 10)}">
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. U字形磁石の操作:</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <button class="btn-action secondary" id="bPole">
+            極反転: ${nOnTop ? '上N / 下S' : '上S / 下N'}
+          </button>
+          <button class="btn-action secondary" id="bMagCount">
+            磁力: ${magnetStrength === 1 ? '磁石1個 (標準)' : '磁石2個 (強力)'}
+          </button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <button class="btn-action secondary" id="bResetMagnet" style="width:100%; font-size:12px; padding:6px;">
+          初期設定に戻す 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('bPower').onclick = () => {
+      isPowerOn = !isPowerOn;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bCurDir').onclick = () => {
+      currentDir *= -1;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('vRange').oninput = (e) => {
+      volt = parseInt(e.target.value) / 10;
+      document.getElementById('vVal').textContent = `${volt.toFixed(1)} V`;
+      updateStatus();
+    };
+
+    document.getElementById('bPole').onclick = () => {
+      nOnTop = !nOnTop;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bMagCount').onclick = () => {
+      magnetStrength = magnetStrength === 1 ? 2 : 1;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bResetMagnet').onclick = resetLab;
   }
 
-  function render() {
-    const force = currentDir * (nOnTop ? 1 : -1);
-    const swingX = force * 45;
+  function resetLab() {
+    currentDir = 1;
+    nOnTop = true;
+    volt = 4.0;
+    magnetStrength = 1;
+    isPowerOn = true;
+    swingPos = 0;
+    swingVel = 0;
+    renderControls();
+    updateStatus();
+  }
 
+  // ========================================================
+  // ★力の向きの計算（フレミング左手の法則・修正済み）
+  // 磁界B: 上N/下S ➔ 下向き (-1)
+  // 電流I: 奥➔手前 ➔ 手前向き (-1)
+  // ➔ 力F: 【右向き (+1)】
+  // ========================================================
+  function getForceSign() {
+    if (!isPowerOn || volt === 0) return 0;
+    const bSign = nOnTop ? -1 : 1; // 上Nなら下向き(-1), 上Sなら上向き(+1)
+    const iSign = currentDir;      // 1: 手前➔奥(+1), -1: 奥➔手前(-1)
+    
+    // 手前(-1) × 下(-1) ➔ 右(+1)
+    // 奥(+1) × 下(-1)   ➔ 左(-1)
+    return iSign * bSign;
+  }
+
+  function updateStatus() {
+    if (!isPowerOn || volt === 0) {
+      setStatus("【スイッチOFF】電流が流れていないため、導線ブランコに力は働きません。");
+      return;
+    }
+
+    const fSign = getForceSign();
+    const dirText = fSign > 0 ? "【右向き】" : "【左向き】";
+    const curText = currentDir > 0 ? "手前 ➔ 奥" : "奥 ➔ 手前";
+    const magFieldText = nOnTop ? "上 ➔ 下 (N➔S)" : "下 ➔ 上 (N➔S)";
+    const magText = magnetStrength === 2 ? "（磁石2個で磁力2倍！）" : "";
+
+    setStatus(`【フレミングの左手の法則】中指（電流：${curText}）・人さし指（磁界：${magFieldText}）により、親指の向き ${dirText} に電磁気力が発生します！${magText}`);
+  }
+
+  renderControls();
+  updateStatus();
+
+  function render() {
+    tick += 0.05;
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    const cx = w/2, cy = h/2;
-    ctx.fillStyle = nOnTop ? "#ef4444" : "#3b82f6";
-    ctx.fillRect(cx - 60, cy - 80, 120, 24);
-    ctx.fillStyle = nOnTop ? "#3b82f6" : "#ef4444";
-    ctx.fillRect(cx - 60, cy + 56, 120, 24);
+    // ブランコの物理シミュレーション
+    const targetForce = getForceSign() * (volt / 10.0) * magnetStrength * 36;
+    const spring = 0.08;
+    const damping = 0.92;
+    swingVel += (targetForce - swingPos) * spring;
+    swingVel *= damping;
+    swingPos += swingVel;
 
-    ctx.strokeStyle = "#eab308";
-    ctx.lineWidth = 4;
+    const leftW = w - 240;
+
+    // 1. 実験ステージ
+    drawStage3D(leftW, h);
+
+    // 2. 右側パネル（手の形ナビ & ルール表）
+    const rightX = w - 230, rightW = 215;
+    drawFlemingHandIllustration(rightX, 15, rightW, 140);
+    drawRuleSummaryTable(rightX, 165, rightW, h - 180);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  function drawStage3D(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🧲 電流が磁界から受ける力（導線ブランコ実験）", 28, 28);
+
+    const cx = bw / 2 - 15;
+    const cy = bh / 2 + 10;
+
+    // 台座
+    ctx.fillStyle = "#1e293b";
     ctx.beginPath();
-    ctx.moveTo(cx - 30, cy - 80);
-    ctx.lineTo(cx + swingX, cy);
-    ctx.lineTo(cx + 30, cy - 80);
+    ctx.moveTo(cx - 130, cy + 45);
+    ctx.lineTo(cx + 35, cy - 20);
+    ctx.lineTo(cx + 140, cy + 18);
+    ctx.lineTo(cx - 25, cy + 85);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
-    animId = requestAnimationFrame(render);
-  }
-  render();
+    // 支柱フレーム
+    const standTopY = cy - 90;
+    ctx.strokeStyle = "#64748b";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 55, cy + 25);
+    ctx.lineTo(cx - 55, standTopY);
+    ctx.lineTo(cx + 45, standTopY - 14);
+    ctx.stroke();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+    // 磁石
+    const magX = cx - 10, magY = cy + 10;
+    const topColor = nOnTop ? "#ef4444" : "#3b82f6";
+    const botColor = nOnTop ? "#3b82f6" : "#ef4444";
+    const topText = nOnTop ? "N" : "S";
+    const botText = nOnTop ? "S" : "N";
+
+    // 下極
+    ctx.fillStyle = botColor;
+    drawIsoBlock(magX - 32, magY + 14, 64, 18, botColor);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(botText, magX, magY + 28);
+
+    // 背骨
+    ctx.fillStyle = "#334155";
+    drawIsoBlock(magX + 22, magY - 40, 16, 54, "#334155");
+
+    // 上極
+    ctx.fillStyle = topColor;
+    drawIsoBlock(magX - 32, magY - 48, 64, 18, topColor);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(topText, magX, magY - 35);
+
+    // 磁力線 (N極からS極へ)
+    ctx.strokeStyle = "rgba(74, 222, 128, 0.7)";
+    ctx.lineWidth = magnetStrength === 2 ? 2.8 : 1.8;
+    for (let i = -1; i <= 1; i++) {
+      const lx = magX + i * 16;
+      const startY = nOnTop ? magY - 30 : magY + 12;
+      const endY = nOnTop ? magY + 12 : magY - 30;
+      drawArrow(lx, startY, lx, endY, 5);
+    }
+    ctx.fillStyle = "#4ade80";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("磁界 B (N➔S)", magX + 42, magY - 10);
+
+    // ブランコ
+    const pivotX1 = cx - 32, pivotY1 = standTopY - 3;
+    const pivotX2 = cx + 22, pivotY2 = standTopY - 11;
+
+    const swingShiftX = swingPos;
+    const swingShiftY = -Math.abs(swingPos) * 0.12;
+
+    const pipeX1 = cx - 36 + swingShiftX, pipeY1 = cy + swingShiftY;
+    const pipeX2 = cx + 18 + swingShiftX, pipeY2 = cy - 22 + swingShiftY;
+
+    // ワイヤー
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(pivotX1, pivotY1);
+    ctx.lineTo(pipeX1, pipeY1);
+    ctx.moveTo(pivotX2, pivotY2);
+    ctx.lineTo(pipeX2, pipeY2);
+    ctx.stroke();
+
+    // 導線パイプ
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(pipeX1, pipeY1);
+    ctx.lineTo(pipeX2, pipeY2);
+    ctx.stroke();
+
+    // 電流矢印
+    if (isPowerOn && volt > 0) {
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2.2;
+      if (currentDir > 0) {
+        // 手前 ➔ 奥
+        drawArrow(pipeX1, pipeY1, pipeX2, pipeY2, 6);
+      } else {
+        // 奥 ➔ 手前
+        drawArrow(pipeX2, pipeY2, pipeX1, pipeY1, 6);
+      }
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 9px sans-serif";
+      ctx.fillText("電流 I", (pipeX1 + pipeX2) / 2 - 14, (pipeY1 + pipeY2) / 2 - 8);
+
+      // 力の矢印
+      const fSign = getForceSign();
+      if (fSign !== 0) {
+        const midPX = (pipeX1 + pipeX2) / 2;
+        const midPY = (pipeY1 + pipeY2) / 2;
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 3;
+        drawArrow(midPX, midPY, midPX + fSign * 32, midPY, 7);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "bold 10px sans-serif";
+        ctx.fillText("力 F", midPX + fSign * 38, midPY - 5);
+      }
+    }
+
+    drawStepGuideBar(35, bh - 65, bw - 60, 38);
+  }
+
+  function drawIsoBlock(x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+  }
+
+  function drawArrow(x1, y1, x2, y2, size) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+  }
+
+  function drawStepGuideBar(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("💡 定番のテスト対策ルール：", bx + 8, by + 13);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("① 電流の向きを逆にすると ➔ 力は逆向きになる。", bx + 8, by + 24);
+    ctx.fillText("② 電流と磁界の『両方を同時に逆』にすると ➔ 力は同じ向きのまま！", bx + 8, by + 34);
+  }
+
+  // ========================================================
+  // B. 右上パネル：フレミング左手の法則（イラスト描画）
+  // ========================================================
+  function drawFlemingHandIllustration(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🖐️ フレミング左手の法則（定義）", bx + 8, by + 16);
+
+    const cx = bx + bw / 2;
+    const cy = by + bh / 2 + 8;
+
+    const bSign = nOnTop ? 1 : -1;  // 1: 下向き(↓), -1: 上向き(↑)
+    const iSign = currentDir;        // 1: 奥(↗), -1: 手前(↙)
+    const fSign = getForceSign();    // 1: 右(→), -1: 左(←)
+
+    // 1. 人さし指: 磁界 (緑)
+    const bLen = 32 * bSign;
+    ctx.strokeStyle = "#4ade80";
+    ctx.lineWidth = 3;
+    drawArrow(cx, cy, cx, cy + bLen, 6);
+    ctx.fillStyle = "#4ade80";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("人: 磁界 (B)", cx + 8, cy + (bSign > 0 ? 22 : -18));
+
+    // 2. 中指: 電流 (青)
+    const iLenX = iSign > 0 ? 26 : -26;
+    const iLenY = iSign > 0 ? -16 : 16;
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 3;
+    drawArrow(cx, cy, cx + iLenX, cy + iLenY, 6);
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillText("中: 電流 (I)", cx + iLenX + (iSign > 0 ? -18 : -28), cy + iLenY + (iSign > 0 ? -8 : 14));
+
+    // 3. 親指: 力 (赤)
+    const fLenX = (fSign !== 0 ? fSign : 1) * 38;
+    ctx.strokeStyle = isPowerOn ? "#ef4444" : "#64748b";
+    ctx.lineWidth = 3.5;
+    drawArrow(cx, cy, cx + fLenX, cy, 7);
+    ctx.fillStyle = isPowerOn ? "#ef4444" : "#64748b";
+    ctx.fillText("親: 力 (F)", cx + fLenX + (fSign > 0 ? 6 : -48), cy - 6);
+
+    // 中心点
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // ゴロ合わせ
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("【覚え方】中・人・親 ＝「電・磁・力」", bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：ルールまとめ表
+  // ========================================================
+  function drawRuleSummaryTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 磁界から受ける力の規則性", bx + 8, by + 16);
+
+    const fSign = getForceSign();
+    const rows = [
+      { label: "電流の向き", val: currentDir > 0 ? "手前 ➔ 奥" : "奥 ➔ 手前", col: "#38bdf8" },
+      { label: "磁界の向き", val: nOnTop ? "上 ➔ 下 (N➔S)" : "下 ➔ 上 (N➔S)", col: "#4ade80" },
+      { label: "受ける力", val: !isPowerOn ? "なし (0N)" : (fSign > 0 ? "右向き" : "左向き"), col: "#ef4444" },
+      { label: "力の強さ", val: !isPowerOn ? "0" : `${(volt * magnetStrength * 10).toFixed(0)} %`, col: "#facc15" }
+    ];
+
+    ctx.font = "10px sans-serif";
+    rows.forEach((r, idx) => {
+      const iy = by + 38 + idx * 26;
+      ctx.fillStyle = "#cbd5e1";
+      ctx.textAlign = "left";
+      ctx.fillText(`・${r.label}:`, bx + 8, iy);
+
+      ctx.fillStyle = r.col;
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(r.val, bx + 75, iy);
+      ctx.font = "10px sans-serif";
+    });
+
+    const footY = by + bh - 44;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 38);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【モーターへの応用】", bx + 10, footY + 13);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("コイルの両側で逆向きの力を受け回転。", bx + 10, footY + 24);
+    ctx.fillText("「整流子」で同じ向きに回り続ける！", bx + 10, footY + 34);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+    }
+  };
 }
 
-// 前線と天気の変化 (中2・地球)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【完全修正版】前線の通過と天気の変化 (中2・地球)
+// ===================================================================
 function initC2Front(canvas) {
   const ctx = canvas.getContext('2d');
-  let type = "cold";
+
+  // --- 実験状態 ---
+  let frontType = "cold";       // 'cold'(寒冷前線) または 'warm'(温暖前線)
+  let frontProgress = 35;       // 前線の位置 % (0〜100: 西から東へ移動)
+  let isAutoPlay = false;       // 自動移動アニメーション
   let animId;
+  let rainTick = 0;
+
+  // 実写写真（雲のリアルな違い）
+  const cloudImages = {
+    cold: new Image(),
+    warm: new Image()
+  };
+  cloudImages.cold.src = 'cloud_cumulonimbus.jpg'; // 積乱雲
+  cloudImages.warm.src = 'cloud_nimbostratus.jpg';  // 乱層雲
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:10px;">
-      <button class="btn-action ${type==='cold'?'':'secondary'}" id="bCold">寒冷前線 (寒気が暖気を急激に押し上げる)</button>
-      <button class="btn-action ${type==='warm'?'':'secondary'}" id="bWarm">温暖前線 (暖気が寒気の上に這い上がる)</button>
-    </div>
-  `;
 
-  document.getElementById('bCold').onclick = () => { type='cold'; updateBtns(); };
-  document.getElementById('bWarm').onclick = () => { type='warm'; updateBtns(); };
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 前線の種類を選択:</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <button class="btn-action ${frontType==='cold'?'':'secondary'}" id="bCold" style="${frontType==='cold'?'background:#0284c7; border-color:#0284c7;':''}">
+            寒冷前線 (急な前線面・積乱雲)
+          </button>
+          <button class="btn-action ${frontType==='warm'?'':'secondary'}" id="bWarm" style="${frontType==='warm'?'background:#ea580c; border-color:#ea580c;':''}">
+            温暖前線 (緩やかな前線面・乱層雲)
+          </button>
+        </div>
+      </div>
 
-  function updateBtns() {
-    document.getElementById('bCold').className = `btn-action ${type==='cold'?'':'secondary'}`;
-    document.getElementById('bWarm').className = `btn-action ${type==='warm'?'':'secondary'}`;
-    if (type==='cold') {
-      setStatus("【寒冷前線】寒気が暖気の下に潜り込み急激に押し上げます。積乱雲が発達し、狭い範囲に短時間の強い雨を降らせます。通過後は気温が下がります。");
-    } else {
-      setStatus("【温暖前線】暖気が寒気の上に緩やかに這い上がります。乱層雲など広範囲の雲が広がり、長時間のしとしとした雨を降らせます。通過後は気温が上がります。");
-    }
+      <div class="ctrl-group">
+        <label>2. 前線の位置（西 ➔ 東へ移動）: <span id="posVal" class="ctrl-val">${frontProgress}%</span></label>
+        <input type="range" id="posRange" min="5" max="95" value="${frontProgress}">
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. 時間経過アニメーション:</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-action ${isAutoPlay?'secondary':''}" id="bPlay" style="${!isAutoPlay?'background:#0d9488; border-color:#0d9488;':''}">
+            ${isAutoPlay ? '一時停止 ⏸️' : '前線を通過させる ▶️'}
+          </button>
+          <button class="btn-action secondary" id="bResetFront">位置リセット 🔄</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('bCold').onclick = () => { frontType = 'cold'; renderControls(); updateStatus(); };
+    document.getElementById('bWarm').onclick = () => { frontType = 'warm'; renderControls(); updateStatus(); };
+
+    document.getElementById('posRange').oninput = (e) => {
+      frontProgress = parseInt(e.target.value);
+      document.getElementById('posVal').textContent = `${frontProgress}%`;
+      updateStatus();
+    };
+
+    document.getElementById('bPlay').onclick = () => {
+      isAutoPlay = !isAutoPlay;
+      renderControls();
+    };
+
+    document.getElementById('bResetFront').onclick = () => {
+      frontProgress = 15;
+      isAutoPlay = false;
+      renderControls();
+      updateStatus();
+    };
   }
-  updateBtns();
 
-  function render() {
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
-    ctx.fillRect(0, 0, w, h);
+  // 観測地点（固定位置: X = 50%）に対する通過状態を判定
+  function getObserverState() {
+    const isCold = (frontType === 'cold');
+    const obsX = 50;
+    const diff = obsX - frontProgress;
 
-    const groundY = h - 40;
-    ctx.fillStyle = "#1e293b";
-    ctx.fillRect(0, groundY, w, 40);
-
-    if (type === 'cold') {
-      ctx.fillStyle = "rgba(59, 130, 246, 0.4)";
-      ctx.beginPath();
-      ctx.moveTo(0, 50);
-      ctx.quadraticCurveTo(w*0.4, 60, w*0.5, groundY);
-      ctx.lineTo(0, groundY);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.beginPath();
-      ctx.ellipse(w*0.45, groundY - 140, 50, 90, 0, 0, Math.PI*2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 2;
-      for (let i=0; i<8; i++) {
-        ctx.beginPath();
-        ctx.moveTo(w*0.42 + i*8, groundY - 40);
-        ctx.lineTo(w*0.40 + i*8, groundY);
-        ctx.stroke();
+    if (isCold) {
+      if (diff > 12) {
+        return { phase: "before", label: "通過前（暖気エリア）", temp: "高 (22℃)", press: "低下傾向", wind: "南寄りの風 (暖)", weather: "くもり/晴れ", rain: false };
+      } else if (diff >= -8 && diff <= 12) {
+        return { phase: "passing", label: "前線通過中！", temp: "急低下中", press: "反転上昇", wind: "突風・風向急変", weather: "激しいにわか雨・雷雨", rain: true, heavy: true };
+      } else {
+        return { phase: "after", label: "通過後（寒気エリア）", temp: "低 (14℃)", press: "上昇", wind: "北寄りの風 (寒)", weather: "やがて晴れ", rain: false };
       }
     } else {
-      ctx.fillStyle = "rgba(244, 63, 94, 0.35)";
-      ctx.beginPath();
-      ctx.moveTo(0, groundY - 120);
-      ctx.lineTo(w*0.8, groundY);
-      ctx.lineTo(0, groundY);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillRect(w*0.2, groundY - 100, 240, 30);
+      if (diff > 25) {
+        return { phase: "far_before", label: "通過はるか前（寒気）", temp: "低 (13℃)", press: "低下中", wind: "東〜南東の風", weather: "うす雲（巻雲・高層雲）", rain: false };
+      } else if (diff >= 0 && diff <= 25) {
+        return { phase: "before_rain", label: "通過直前（雨エリア）", temp: "やや低 (15℃)", press: "さらに低下", wind: "南東寄りの風", weather: "しとしと長雨（乱層雲）", rain: true, heavy: false };
+      } else {
+        return { phase: "after", label: "通過後（暖気エリア）", temp: "高 (21℃)", press: "下降して安定", wind: "南寄りの風 (暖)", weather: "雨が止み晴れ", rain: false };
+      }
     }
+  }
+
+  function updateStatus() {
+    const state = getObserverState();
+    const fName = frontType === 'cold' ? '寒冷前線' : '温暖前線';
+
+    if (frontType === 'cold') {
+      setStatus(`【${fName}の観測点】現在『${state.label}』：気温: ${state.temp}／風向: ${state.wind}／天気: ${state.weather}。寒気が暖気の下に潜り込み急激に押し上げるため、通過時に短時間の激しい雨が降ります。`);
+    } else {
+      setStatus(`【${fName}の観測点】現在『${state.label}』：気温: ${state.temp}／風向: ${state.wind}／天気: ${state.weather}。暖気が寒気の上に緩やかに這い上がるため、前線の通過前に広い範囲で穏やかな雨が長く続きます。`);
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
+  function render() {
+    rainTick += 0.4;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    if (isAutoPlay) {
+      frontProgress += 0.25;
+      if (frontProgress > 95) frontProgress = 5;
+      const rng = document.getElementById('posRange');
+      const val = document.getElementById('posVal');
+      if (rng) rng.value = Math.round(frontProgress);
+      if (val) val.textContent = `${Math.round(frontProgress)}%`;
+      updateStatus();
+    }
+
+    const leftW = w - 240;
+
+    // 1. メイン立体断面図
+    drawFrontCrossSection(leftW, h);
+
+    // 2. 右側パネル（実写写真枠 & 気象変化対照表）
+    const rightX = w - 230, rightW = 215;
+    drawCloudPhotoBox(rightX, 15, rightW, 140);
+    drawWeatherSummaryTable(rightX, 165, rightW, h - 180);
 
     animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  // ========================================================
+  // A. メイン立体断面図
+  // ========================================================
+  function drawFrontCrossSection(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    const groundY = bh - 60;
+    const isCold = (frontType === "cold");
+    const fx = 35 + (bw - 70) * (frontProgress / 100);
+
+    // 方角表示
+    ctx.fillStyle = "#64748b";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("西（寒気側）", 28, 38);
+    ctx.textAlign = "right";
+    ctx.fillText("東（進行方向）", bw - 28, 38);
+
+    if (isCold) {
+      // 暖気エリア
+      ctx.fillStyle = "rgba(244, 63, 94, 0.12)";
+      ctx.fillRect(20, 45, bw - 40, groundY - 45);
+
+      // 寒気エリア（急角度で潜り込む自然なカーブ）
+      ctx.fillStyle = "rgba(59, 130, 246, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(20, groundY);
+      ctx.lineTo(fx, groundY);
+      ctx.quadraticCurveTo(fx - 15, groundY - 80, 20, groundY - 140);
+      ctx.closePath();
+      ctx.fill();
+
+      // 前線面境界線
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(fx, groundY);
+      ctx.quadraticCurveTo(fx - 15, groundY - 80, 20, groundY - 140);
+      ctx.stroke();
+
+      // 雨（狭い範囲に激しい雨）
+      drawRain(fx - 65, fx - 10, groundY - 50, groundY, 40, true);
+
+      // 積乱雲（灰色の四角を排除したモコモコ雲）
+      drawCumulonimbus(fx - 35, groundY - 50, 90, 130);
+
+      // 気流の矢印
+      drawWindArrow(fx - 75, groundY - 18, fx - 25, groundY - 18, "#38bdf8", "寒気");
+      drawWindArrow(fx + 30, groundY - 15, fx - 10, groundY - 75, "#f43f5e", "急上昇気流");
+
+    } else {
+      // 暖気エリア（這い上がり）
+      ctx.fillStyle = "rgba(244, 63, 94, 0.18)";
+      ctx.beginPath();
+      ctx.moveTo(20, groundY);
+      ctx.lineTo(fx, groundY);
+      ctx.lineTo(bw - 20, groundY - 130);
+      ctx.lineTo(20, groundY - 130);
+      ctx.closePath();
+      ctx.fill();
+
+      // 寒気エリア（右下のくさび形）
+      ctx.fillStyle = "rgba(59, 130, 246, 0.35)";
+      ctx.beginPath();
+      ctx.moveTo(fx, groundY);
+      ctx.lineTo(bw - 20, groundY);
+      ctx.lineTo(bw - 20, groundY - 130);
+      ctx.closePath();
+      ctx.fill();
+
+      // 前線面境界線
+      ctx.strokeStyle = "#ea580c";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(fx, groundY);
+      ctx.lineTo(bw - 20, groundY - 130);
+      ctx.stroke();
+
+      // 雨（広い範囲に穏やかな雨）
+      drawRain(fx + 15, bw - 30, groundY - 45, groundY, 45, false);
+
+      // 乱層雲（層状の雲）
+      drawNimbostratus(fx + 10, groundY - 55, (bw - 20) - (fx + 10), 45);
+
+      // 気流の矢印
+      drawWindArrow(fx - 50, groundY - 15, fx + 25, groundY - 40, "#f43f5e", "暖気の這い上がり");
+      drawWindArrow(bw - 60, groundY - 15, fx + 20, groundY - 15, "#38bdf8", "寒気");
+    }
+
+    // 地面
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(15, groundY, bw - 20, bh - groundY - 15);
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(15, groundY, bw - 20, bh - groundY - 15);
+
+    // 地上の前線記号（▲▲▲ または ●●●）
+    drawFrontSymbolsOnGround(fx, groundY + 12, isCold);
+
+    // 地上観測地点（学校アイコン）
+    const obsPixelX = 15 + (bw - 20) * 0.5;
+    drawObserverStation(obsPixelX, groundY);
+  }
+
+  // 積乱雲の描画
+  function drawCumulonimbus(cx, baseY, cw, ch) {
+    ctx.save();
+    
+    // 雲底のソフトシャドウ
+    ctx.fillStyle = "rgba(71, 85, 105, 0.75)";
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY - 15, cw * 0.42, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // モコモコした雲本体
+    ctx.fillStyle = "rgba(241, 245, 249, 0.92)";
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY - ch * 0.35, cw * 0.45, ch * 0.35, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 12, baseY - ch * 0.65, cw * 0.38, ch * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - 15, baseY - ch * 0.5, cw * 0.35, ch * 0.25, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 5, baseY - ch * 0.85, cw * 0.3, ch * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("積乱雲", cx, baseY - ch - 4);
+  }
+
+  // 乱層雲の描画
+  function drawNimbostratus(x, y, w, h) {
+    ctx.save();
+    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+    grad.addColorStop(0, "rgba(100, 116, 139, 0.9)");
+    grad.addColorStop(1, "rgba(203, 213, 225, 0.6)");
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x + w, y - 25);
+    ctx.lineTo(x + w, y - 45);
+    ctx.lineTo(x, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("乱層雲", x + w * 0.45, y - 35);
+  }
+
+  // 雨のアニメーション
+  function drawRain(minX, maxX, startY, endY, count, isHeavy) {
+    ctx.save();
+    ctx.strokeStyle = isHeavy ? "#38bdf8" : "rgba(148, 163, 184, 0.75)";
+    ctx.lineWidth = isHeavy ? 2.2 : 1.2;
+
+    const span = Math.max(10, maxX - minX);
+    for (let i = 0; i < count; i++) {
+      const rx = minX + ((i * 37 + rainTick * (isHeavy ? 18 : 10)) % span);
+      const ry = startY + ((i * 19 + rainTick * (isHeavy ? 24 : 14)) % (endY - startY));
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx - (isHeavy ? 4 : 2), ry + (isHeavy ? 12 : 7));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 地上の前線記号
+  function drawFrontSymbolsOnGround(fx, y, isCold) {
+    ctx.save();
+    ctx.fillStyle = isCold ? "#0284c7" : "#ea580c";
+    ctx.strokeStyle = isCold ? "#0284c7" : "#ea580c";
+    ctx.lineWidth = 3;
+
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(fx, y - 12);
+    ctx.lineTo(fx, 45);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (let i = -1; i <= 1; i++) {
+      const sx = fx + i * 18;
+      ctx.beginPath();
+      if (isCold) {
+        ctx.moveTo(sx, y - 6);
+        ctx.lineTo(sx + 10, y);
+        ctx.lineTo(sx, y + 6);
+      } else {
+        ctx.arc(sx, y, 6, -Math.PI / 2, Math.PI / 2, false);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // 観測地点アイコン
+  function drawObserverStation(x, groundY) {
+    ctx.save();
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.arc(x, groundY - 18, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, groundY - 12);
+    ctx.lineTo(x, groundY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("🏫 観測地点（あなた）", x, groundY + 28);
+
+    const state = getObserverState();
+    ctx.fillStyle = state.rain ? "#38bdf8" : "#cbd5e1";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(state.weather, x, groundY + 42);
+    ctx.restore();
+  }
+
+  // 矢印と文字の描画
+  function drawWindArrow(x1, y1, x2, y2, color, label) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - 8 * Math.cos(angle - Math.PI / 6), y2 - 8 * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 8 * Math.cos(angle + Math.PI / 6), y2 - 8 * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+
+    const midX = (x1 + x2) / 2;
+    const midY = (y1 + y2) / 2 - 8;
+    ctx.font = "bold 10px sans-serif";
+    const textW = ctx.measureText(label).width;
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+    ctx.fillRect(midX - textW / 2 - 3, midY - 9, textW + 6, 13);
+
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(label, midX, midY + 1);
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawCloudPhotoBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: 代表的な雲", bx + 8, by + 16);
+
+    const isCold = (frontType === "cold");
+    const targetImg = isCold ? cloudImages.cold : cloudImages.warm;
+    const label = isCold ? "積乱雲（激しい雨・雷・突風）" : "乱層雲（一面の雨雲・しとしと雨）";
+
+    if (targetImg.complete && targetImg.naturalWidth !== 0) {
+      ctx.drawImage(targetImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${isCold ? 'cloud_cumulonimbus.jpg' : 'cloud_nimbostratus.jpg'}`, bx + bw / 2, by + bh / 2);
+      ctx.fillText("実写画像待機中", bx + bw / 2, by + bh / 2 + 15);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 20, bw - 16, 16);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：対照表
+  // ========================================================
+  function drawWeatherSummaryTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 通過前後の変化（テスト頻出）", bx + 8, by + 16);
+
+    const isCold = (frontType === "cold");
+    const rows = isCold ? [
+      { item: "前線面の傾き", val: "急（強い上昇気流）" },
+      { item: "発生する雲",   val: "積乱雲（縦に長い）" },
+      { item: "雨の降り方",   val: "狭い範囲・強い短時間雨" },
+      { item: "通過後の気温", val: "急激に下がる ⬇️" },
+      { item: "通過後の風向", val: "南寄り ➔ 北寄りに急変" }
+    ] : [
+      { item: "前線面の傾き", val: "緩やか（這い上がり）" },
+      { item: "発生する雲",   val: "乱層雲（広範囲）" },
+      { item: "雨の降り方",   val: "広い範囲・穏やかな長雨" },
+      { item: "通過後の気温", val: "上がる ⬆️" },
+      { item: "通過後の風向", val: "南東 ➔ 南寄りに変化" }
+    ];
+
+    ctx.font = "10px sans-serif";
+    rows.forEach((r, idx) => {
+      const iy = by + 36 + idx * 24;
+      ctx.fillStyle = "#94a3b8";
+      ctx.textAlign = "left";
+      ctx.fillText(r.item, bx + 8, iy);
+
+      ctx.fillStyle = (idx >= 3) ? "#facc15" : "#e2e8f0";
+      ctx.font = (idx >= 3) ? "bold 10px sans-serif" : "10px sans-serif";
+      ctx.fillText(r.val, bx + 78, iy);
+      ctx.font = "10px sans-serif";
+    });
+
+    const footY = by + bh - 44;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 38);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【ポイント】前線通過のサイン：", bx + 10, footY + 13);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("「風向きの急変」と「気温の急変」が", bx + 10, footY + 24);
+    ctx.fillText("同時に起きるのが前線通過の特徴！", bx + 10, footY + 34);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+    }
+  };
 }
 
-// 中和反応 (中3・物質)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【座標・文字被り完全修正版】中和反応と塩の生成 (中3・物質)
+// ===================================================================
 function initC3Neutral(canvas) {
   const ctx = canvas.getContext('2d');
-  let naohDrops = 0;
+
+  // --- 実験状態 ---
+  let naohAdded = 0.0;          // 加えたNaOH水溶液の体積 (0.0 〜 20.0 mL)
+  const neutralPoint = 10.0;    // 中和点 (10.0 mL)
+  const initialHCount = 8;      // 初期の H+ の個数
+  const initialClCount = 8;     // 初期の Cl- の個数
+
+  let isDripping = false;       // 滴下アニメーション
+  let dripY = 0;
   let animId;
+  let tick = 0;
+
+  // 実写写真（スライドガラスで乾かしたNaCl結晶）
+  const crystalImg = new Image();
+  crystalImg.src = 'crystal_nacl_neutral.jpg';
+
+  // 水溶液内を浮遊するイオンの物理粒子
+  const ionParticles = [];
+
+  // ビーカーの基準配置（左エリア中央）
+  function getBeakerBounds(bw, bh) {
+    const beakerW = 120;
+    const beakerH = 145;
+    const beakerX = (bw / 2) - (beakerW / 2) - 10;
+    const beakerY = 160;
+    const liquidH = 85 + (naohAdded / 20.0) * 22;
+    return { beakerX, beakerY, beakerW, beakerH, liquidH };
+  }
+
+  // 初期の塩酸 (H+ と Cl-) をビーカー内部に確実に生成
+  function initIonPopulation() {
+    ionParticles.length = 0;
+    const { beakerX, beakerY, beakerW, beakerH, liquidH } = getBeakerBounds(canvas.width - 240, canvas.height);
+    const minY = beakerY + beakerH - liquidH + 12;
+    const maxY = beakerY + beakerH - 14;
+
+    for (let i = 0; i < initialHCount; i++) {
+      ionParticles.push({
+        type: "H",
+        x: beakerX + 15 + Math.random() * (beakerW - 30),
+        y: minY + Math.random() * (maxY - minY),
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: (Math.random() - 0.5) * 0.8
+      });
+      ionParticles.push({
+        type: "Cl",
+        x: beakerX + 15 + Math.random() * (beakerW - 30),
+        y: minY + Math.random() * (maxY - minY),
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6
+      });
+    }
+  }
+  initIonPopulation();
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>水酸化ナトリウム水溶液の滴下: <span id="dropVal" class="ctrl-val">${naohDrops} 滴</span></label>
-      <button class="btn-action" id="bDrop">1滴加える ＋</button>
-    </div>
-    <div class="ctrl-group">
-      <label>リセット:</label>
-      <button class="btn-action secondary" id="bResetN">最初からやり直す</button>
-    </div>
-  `;
 
-  document.getElementById('bDrop').onclick = () => {
-    if (naohDrops < 20) naohDrops++;
-    document.getElementById('dropVal').textContent = `${naohDrops} 滴`;
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 水酸化ナトリウム水溶液の滴下量: <span id="naohVal" class="ctrl-val" style="color:#38bdf8; font-weight:bold;">${naohAdded.toFixed(1)} mL</span></label>
+        <input type="range" id="naohRange" min="0" max="200" value="${Math.round(naohAdded * 10)}">
+      </div>
+
+      <div class="ctrl-group">
+        <label>2. ビュレット操作:</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <button class="btn-action" id="bDropOne" style="padding:8px 4px; font-size:12px;">1滴加える (+0.5mL) 💧</button>
+          <button class="btn-action secondary" id="bToNeutral" style="padding:8px 4px; font-size:12px;">中和点(10mL)に合わせる</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bEvapNaCl" style="flex:2; color:#facc15; border-color:#facc15; font-size:12px; padding:6px;">
+          🔬 スライドガラスに液をとって水分を蒸発させる（結晶観察）
+        </button>
+        <button class="btn-action secondary" id="bResetNeutral" style="flex:1; font-size:12px; padding:6px;">
+          最初からやり直す 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('naohRange').oninput = (e) => {
+      naohAdded = parseInt(e.target.value) / 10;
+      document.getElementById('naohVal').textContent = `${naohAdded.toFixed(1)} mL`;
+      syncIons();
+      updateStatus();
+    };
+
+    document.getElementById('bDropOne').onclick = () => {
+      if (naohAdded < 20.0) {
+        naohAdded = Math.min(20.0, naohAdded + 0.5);
+        document.getElementById('naohRange').value = Math.round(naohAdded * 10);
+        document.getElementById('naohVal').textContent = `${naohAdded.toFixed(1)} mL`;
+        isDripping = true;
+        dripY = 135;
+        syncIons();
+        updateStatus();
+      }
+    };
+
+    document.getElementById('bToNeutral').onclick = () => {
+      naohAdded = neutralPoint;
+      document.getElementById('naohRange').value = Math.round(naohAdded * 10);
+      document.getElementById('naohVal').textContent = `${naohAdded.toFixed(1)} mL`;
+      syncIons();
+      updateStatus();
+    };
+
+    document.getElementById('bEvapNaCl').onclick = showEvapModal;
+    document.getElementById('bResetNeutral').onclick = resetLab;
+  }
+
+  // 加えたNaOH量に応じて水溶液内のイオン数を同期
+  function syncIons() {
+    const naAddedCount = Math.round((naohAdded / neutralPoint) * initialHCount);
+    const targetH = Math.max(0, initialHCount - naAddedCount);
+    const targetOH = Math.max(0, naAddedCount - initialHCount);
+    const targetNa = naAddedCount;
+    const targetCl = initialClCount;
+
+    adjustIonType("H", targetH);
+    adjustIonType("OH", targetOH);
+    adjustIonType("Na", targetNa);
+    adjustIonType("Cl", targetCl);
+  }
+
+  function adjustIonType(type, targetCount) {
+    const current = ionParticles.filter(p => p.type === type);
+    const { beakerX, beakerY, beakerW, beakerH, liquidH } = getBeakerBounds(canvas.width - 240, canvas.height);
+    const minY = beakerY + beakerH - liquidH + 12;
+    const maxY = beakerY + beakerH - 14;
+
+    if (current.length < targetCount) {
+      for (let i = 0; i < targetCount - current.length; i++) {
+        ionParticles.push({
+          type: type,
+          x: beakerX + 15 + Math.random() * (beakerW - 30),
+          y: minY + Math.random() * (maxY - minY),
+          vx: (Math.random() - 0.5) * 0.7,
+          vy: (Math.random() - 0.5) * 0.7
+        });
+      }
+    } else if (current.length > targetCount) {
+      let removeCount = current.length - targetCount;
+      for (let i = ionParticles.length - 1; i >= 0 && removeCount > 0; i--) {
+        if (ionParticles[i].type === type) {
+          ionParticles.splice(i, 1);
+          removeCount--;
+        }
+      }
+    }
+  }
+
+  function resetLab() {
+    naohAdded = 0.0;
+    initIonPopulation();
+    const modal = document.getElementById('naclEvapModal');
+    if (modal) modal.remove();
+    renderControls();
     updateStatus();
-  };
-  document.getElementById('bResetN').onclick = () => {
-    naohDrops = 0;
-    document.getElementById('dropVal').textContent = `0 滴`;
-    updateStatus();
-  };
+  }
+
+  function getReactionState() {
+    const naAddedCount = Math.round((naohAdded / neutralPoint) * initialHCount);
+    const hCount = Math.max(0, initialHCount - naAddedCount);
+    const ohCount = Math.max(0, naAddedCount - initialHCount);
+    const naCount = naAddedCount;
+    const clCount = initialClCount;
+
+    let btbColor = "#eab308";
+    let stateName = "酸性";
+    let phText = "pH < 7";
+
+    if (Math.abs(naohAdded - neutralPoint) < 0.2) {
+      btbColor = "#22c55e"; // 鮮やかな緑
+      stateName = "中性（中和点）";
+      phText = "pH = 7";
+    } else if (naohAdded > neutralPoint) {
+      btbColor = "#0284c7"; // 青色
+      stateName = "アルカリ性";
+      phText = "pH > 7";
+    }
+
+    // 中和熱
+    const heatGain = (Math.min(naohAdded, neutralPoint) / neutralPoint) * 6.5;
+    const coolLoss = Math.max(0, naohAdded - neutralPoint) * 0.35;
+    const temp = 25.0 + heatGain - coolLoss;
+
+    return { hCount, ohCount, naCount, clCount, btbColor, stateName, phText, temp };
+  }
 
   function updateStatus() {
-    if (naohDrops < 10) setStatus(`【酸性】塩酸のH⁺がまだ残っています（BTB溶液：黄色）。pH < 7`);
-    else if (naohDrops === 10) setStatus(`【中性（中和完了！）】H⁺ と OH⁻ が完全に結びつき水と塩（NaCl）になりました！（BTB溶液：緑色）。pH = 7`);
-    else setStatus(`【アルカリ性】OH⁻ が過剰になりました（BTB溶液：青色）。pH > 7`);
+    const st = getReactionState();
+
+    if (st.stateName.includes("中和点")) {
+      setStatus(`【中性（完全中和達成！）】H⁺ と OH⁻ がすべて結びついて水(H₂O)になりました（BTB: 緑色）！水溶液中には Na⁺ と Cl⁻ がイオンのまま溶けて存在しています。中和熱により液温は最高(${st.temp.toFixed(1)}℃)に達しています！`);
+    } else if (st.stateName === "酸性") {
+      setStatus(`【酸性】H⁺（水素イオン）がまだ${st.hCount}個残っています（BTB: 黄色 / ${st.phText}）。温度: ${st.temp.toFixed(1)}℃。滴下を続けて中和点(10mL)を目指しましょう。`);
+    } else {
+      setStatus(`【アルカリ性】中和点を超えて OH⁻（水酸化物イオン）が過剰に入り始めました（BTB: 青色 / ${st.phText}）。常温の液が入り続けるため温度は低下傾向(${st.temp.toFixed(1)}℃)になります。`);
+    }
   }
+
+  function showEvapModal() {
+    let modal = document.getElementById('naclEvapModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'naclEvapModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.88)';
+    modal.style.zIndex = '9999';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.padding = '20px';
+    modal.style.cursor = 'pointer';
+
+    const card = document.createElement('div');
+    card.style.background = '#0f172a';
+    card.style.border = '2px solid #38bdf8';
+    card.style.borderRadius = '14px';
+    card.style.maxWidth = '580px';
+    card.style.width = '90%';
+    card.style.padding = '22px';
+    card.style.boxShadow = '0 0 35px rgba(56, 189, 248, 0.5)';
+    card.style.textAlign = 'center';
+    card.style.color = '#ffffff';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = '🔬 【中和で生じた塩の結晶化】';
+    h2.style.color = '#38bdf8';
+    h2.style.fontSize = '18px';
+    h2.style.marginBottom = '12px';
+    card.appendChild(h2);
+
+    if (crystalImg.complete && crystalImg.naturalWidth !== 0) {
+      const img = document.createElement('img');
+      img.src = crystalImg.src;
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '230px';
+      img.style.borderRadius = '8px';
+      img.style.marginBottom = '12px';
+      card.appendChild(img);
+    }
+
+    const desc = document.createElement('div');
+    desc.style.fontSize = '13px';
+    desc.style.lineHeight = '1.7';
+    desc.style.textAlign = 'left';
+    desc.style.background = '#1e293b';
+    desc.style.padding = '14px';
+    desc.style.borderRadius = '8px';
+    desc.style.color = '#f1f5f9';
+    desc.innerHTML = `
+      <strong style="color:#facc15;">★ 中和した液の中身はどうなっている？</strong><br>
+      中和点に達した水溶液中では、酸の陰イオン（Cl⁻）とアルカリの陽イオン（Na⁺）がバラバラに電離した状態で泳いでいます。<br><br>
+      <strong style="color:#38bdf8;">★ 水分を蒸発させるとどうなる？（入試頻出）：</strong><br>
+      スライドガラスに液を1滴とり、加熱して水分を蒸発させると、水分子がなくなり <strong>Na⁺ と Cl⁻ が結びついて、美しいサイコロ状（立方体）の塩化ナトリウム（食塩）の結晶</strong> が現れます！
+    `;
+    card.appendChild(desc);
+
+    const tip = document.createElement('p');
+    tip.textContent = 'クリックすると閉じて実験に戻ります';
+    tip.style.fontSize = '12px';
+    tip.style.color = '#94a3b8';
+    tip.style.marginTop = '12px';
+    card.appendChild(tip);
+
+    modal.appendChild(card);
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  }
+
+  renderControls();
+  updateStatus();
+
+  function render() {
+    tick += 0.05;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    const leftW = w - 240;
+
+    // 1. 実験ベンチ
+    drawNeutralBench(leftW, h);
+
+    // 2. 右側パネル
+    const rightX = w - 230, rightW = 215;
+    drawCrystalPhotoBox(rightX, 15, rightW, 140);
+    drawIonGraphPanel(rightX, 165, rightW, h - 180);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  function drawNeutralBench(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("⚗️ 中和反応と水溶液内のイオンモデル（HCl + NaOH）", 28, 28);
+
+    const st = getReactionState();
+    const { beakerX, beakerY, beakerW, beakerH, liquidH } = getBeakerBounds(bw, bh);
+
+    // 1. ビュレット（ビーカーの中央真上に配置）
+    const burX = beakerX + beakerW / 2;
+    const bHeight = 80;
+    const filledH = bHeight * (1.0 - (naohAdded / 20.0));
+
+    ctx.fillStyle = "rgba(14, 165, 233, 0.25)";
+    ctx.fillRect(burX - 7, 45 + (bHeight - filledH), 14, filledH);
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(burX - 7, 45, 14, bHeight);
+
+    // コック
+    ctx.fillStyle = "#64748b";
+    ctx.fillRect(burX - 12, 125, 24, 6);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("NaOH水溶液", burX, 40);
+
+    // 滴下の水滴アニメーション
+    if (isDripping) {
+      dripY += 6;
+      ctx.fillStyle = "#0284c7";
+      ctx.beginPath();
+      ctx.arc(burX, dripY, 3, 0, Math.PI * 2);
+      ctx.fill();
+      if (dripY > beakerY + 10) isDripping = false;
+    }
+
+    // 2. ビーカー（BTB溶液の色で満たす）
+    ctx.fillStyle = st.btbColor;
+    ctx.globalAlpha = 0.65;
+    ctx.fillRect(beakerX + 3, beakerY + beakerH - liquidH, beakerW - 6, liquidH - 3);
+    ctx.globalAlpha = 1.0;
+
+    // ビーカー外枠
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(beakerX, beakerY, beakerW, beakerH);
+
+    // 液性ラベル
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`【${st.stateName}】`, beakerX + beakerW / 2, beakerY - 8);
+
+    // 3. 温度計（ビーカー右側に被らないよう配置）
+    const thX = beakerX + beakerW + 12;
+    ctx.fillStyle = "#e2e8f0";
+    ctx.fillRect(thX, beakerY, 6, beakerH - 10);
+    ctx.fillStyle = "#ef4444";
+    const thH = Math.max(10, ((st.temp - 20) / 15) * (beakerH - 30));
+    ctx.fillRect(thX, beakerY + beakerH - 20 - thH, 6, thH);
+    ctx.beginPath();
+    ctx.arc(thX + 3, beakerY + beakerH - 15, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`${st.temp.toFixed(1)}℃`, thX + 12, beakerY + 25);
+    ctx.font = "8px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("中和熱", thX + 12, beakerY + 36);
+
+    // 4. 水溶液内のイオンモデル（ビーカー内部のみで確実にバウンド）
+    const minY = beakerY + beakerH - liquidH + 10;
+    const maxY = beakerY + beakerH - 12;
+
+    ionParticles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+
+      // ビーカー壁での跳ね返り（内側に確実に収める）
+      if (p.x < beakerX + 12) { p.x = beakerX + 12; p.vx *= -1; }
+      if (p.x > beakerX + beakerW - 12) { p.x = beakerX + beakerW - 12; p.vx *= -1; }
+      if (p.y < minY) { p.y = minY; p.vy *= -1; }
+      if (p.y > maxY) { p.y = maxY; p.vy *= -1; }
+
+      drawIonParticle(p.x, p.y, p.type);
+    });
+
+    // 下部：化学反応式＆イオン解説バー（2段構成で文字被りを完全解消）
+    drawReactionFormulaBar(25, bh - 60, bw - 45, 42, st);
+  }
+
+  function drawIonParticle(x, y, type) {
+    ctx.save();
+    let col = "#ffffff";
+    let text = type;
+
+    if (type === "H") {
+      col = "#ef4444"; // 水素イオン（赤）
+      text = "H⁺";
+    } else if (type === "Cl") {
+      col = "#22c55e"; // 塩化物イオン（緑）
+      text = "Cl⁻";
+    } else if (type === "Na") {
+      col = "#eab308"; // ナトリウムイオン（黄）
+      text = "Na⁺";
+    } else if (type === "OH") {
+      col = "#38bdf8"; // 水酸化物イオン（青）
+      text = "OH⁻";
+    }
+
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = (type === "Na" || type === "H") ? "#000000" : "#ffffff";
+    ctx.font = "bold 8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(text, x, y + 3);
+    ctx.restore();
+  }
+
+  // 文字被りを解消した2段表示バー
+  function drawReactionFormulaBar(bx, by, bw, bh, st) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // 1行目：中和の反応式
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📝 中和の本質:", bx + 8, by + 14);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("H⁺ ＋ OH⁻ ➔ H₂O（水） ＋ 熱（中和熱）", bx + 82, by + 14);
+
+    // 2行目：現在のイオン個数内訳
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("水溶液中のイオン内訳:", bx + 8, by + 30);
+
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillStyle = "#ef4444"; ctx.fillText(`H⁺: ${st.hCount}個`, bx + 115, by + 30);
+    ctx.fillStyle = "#22c55e"; ctx.fillText(`Cl⁻: ${st.clCount}個`, bx + 165, by + 30);
+    ctx.fillStyle = "#eab308"; ctx.fillText(`Na⁺: ${st.naCount}個`, bx + 215, by + 30);
+    ctx.fillStyle = "#38bdf8"; ctx.fillText(`OH⁻: ${st.ohCount}個`, bx + 265, by + 30);
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawCrystalPhotoBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: 中和で生じた塩(NaCl)", bx + 8, by + 16);
+
+    if (crystalImg.complete && crystalImg.naturalWidth !== 0) {
+      ctx.drawImage(crystalImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("crystal_nacl_neutral.jpg", bx + bw / 2, by + bh / 2);
+      ctx.fillText("実写画像待機中", bx + bw / 2, by + bh / 2 + 15);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 20, bw - 16, 16);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("塩化ナトリウムの立方体結晶", bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：イオン数変化グラフ
+  // ========================================================
+  function drawIonGraphPanel(gx, gy, gw, gh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(gx, gy, gw, gh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📈 加えたNaOH量とイオン数変化", gx + 8, gy + 16);
+
+    const plotX = gx + 35, plotY = gy + 32;
+    const plotW = gw - 48, plotH = gh - 55;
+
+    // グリッド線
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(plotX, plotY + plotH); ctx.lineTo(plotX + plotW, plotY + plotH);
+    ctx.moveTo(plotX, plotY); ctx.lineTo(plotX + plotW, plotY);
+    ctx.stroke();
+
+    // 中和点 (10mL) の点線ライン
+    const midX = plotX + plotW * 0.5;
+    ctx.setLineDash([2, 2]);
+    ctx.strokeStyle = "#64748b";
+    ctx.beginPath();
+    ctx.moveTo(midX, plotY); ctx.lineTo(midX, plotY + plotH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("中和点", midX, plotY + plotH + 12);
+    ctx.fillText("20mL", plotX + plotW, plotY + plotH + 12);
+    ctx.fillText("0", plotX, plotY + plotH + 12);
+
+    // 1. Cl-（緑・ずっと一定・横ばい）
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(plotX, plotY + plotH * 0.5);
+    ctx.lineTo(plotX + plotW, plotY + plotH * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = "#22c55e";
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillText("Cl⁻(不変)", plotX + plotW - 18, plotY + plotH * 0.5 - 4);
+
+    // 2. H+（赤・最初いて中和点で0になる）
+    ctx.strokeStyle = "#ef4444";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(plotX, plotY + plotH * 0.5);
+    ctx.lineTo(midX, plotY + plotH);
+    ctx.lineTo(plotX + plotW, plotY + plotH);
+    ctx.stroke();
+    ctx.fillStyle = "#ef4444";
+    ctx.fillText("H⁺(減少)", plotX + 18, plotY + plotH * 0.45);
+
+    // 3. Na+（黄・右肩上がりで増え続ける）
+    ctx.strokeStyle = "#eab308";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(plotX, plotY + plotH);
+    ctx.lineTo(plotX + plotW, plotY);
+    ctx.stroke();
+    ctx.fillStyle = "#eab308";
+    ctx.fillText("Na⁺(増加)", plotX + plotW - 18, plotY + 12);
+
+    // 4. OH-（青・中和点まで0、そこから増える）
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(plotX, plotY + plotH);
+    ctx.lineTo(midX, plotY + plotH);
+    ctx.lineTo(plotX + plotW, plotY + plotH * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillText("OH⁻", plotX + plotW - 12, plotY + plotH * 0.65);
+
+    // 現在の滴下位置マーカーバー
+    const curX = plotX + (naohAdded / 20.0) * plotW;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(curX, plotY);
+    ctx.lineTo(curX, plotY + plotH);
+    ctx.stroke();
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('naclEvapModal');
+      if (modal) modal.remove();
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【完全版】ダニエル電池とイオンの移動 (中3・物質)
+// ===================================================================
+function initC3Daniel(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // --- 実験状態 ---
+  let isConnected = true;       // 回路接続中（放電中）
+  let hasSeparator = true;      // 素焼き板（セロハン仕切り）の有無
+  let dischargeProgress = 0.0;  // 反応進行度 (0.0 〜 100.0%)
+  let animId;
+  let propellerAngle = 0.0;
+  let electronTick = 0;
+
+  // 実写写真（放電後の亜鉛板・銅板の電極比較）
+  const electrodeImg = new Image();
+  electrodeImg.src = 'crystal_daniell_electrodes.jpg';
+
+  // 水槽の幾何学定数
+  function getVesselBounds(bw) {
+    const vesselW = 230;
+    const vesselH = 130;
+    const vesselX = (bw / 2) - (vesselW / 2) - 15;
+    const vesselY = 175;
+    const cx = vesselX + vesselW / 2;
+    return { vesselX, vesselY, vesselW, vesselH, cx };
+  }
+
+  // 水溶液中を浮遊するイオン粒子
+  const ions = [];
+
+  function initIons() {
+    ions.length = 0;
+    const { vesselX, vesselY, vesselW, vesselH, cx } = getVesselBounds(canvas.width - 240);
+    // 左（硫酸亜鉛）：Zn2+ と SO4 2-
+    for (let i = 0; i < 6; i++) {
+      ions.push({
+        type: "Zn2",
+        x: vesselX + 15 + Math.random() * (cx - vesselX - 30),
+        y: vesselY + 35 + Math.random() * (vesselH - 50),
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5
+      });
+      ions.push({
+        type: "SO4_L",
+        x: vesselX + 15 + Math.random() * (cx - vesselX - 30),
+        y: vesselY + 35 + Math.random() * (vesselH - 50),
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4
+      });
+    }
+    // 右（硫酸銅）：Cu2+ と SO4 2-
+    for (let i = 0; i < 6; i++) {
+      ions.push({
+        type: "Cu2",
+        x: cx + 15 + Math.random() * (vesselX + vesselW - cx - 30),
+        y: vesselY + 35 + Math.random() * (vesselH - 50),
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5
+      });
+      ions.push({
+        type: "SO4_R",
+        x: cx + 15 + Math.random() * (vesselX + vesselW - cx - 30),
+        y: vesselY + 35 + Math.random() * (vesselH - 50),
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4
+      });
+    }
+  }
+  initIons();
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    const isFinished = dischargeProgress >= 100.0;
+
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 回路スイッチ:</label>
+        <button class="btn-action ${isConnected?'':'secondary'}" id="bConnect" style="${isConnected?'background:#0d9488; border-color:#0d9488;':''}">
+          ${isConnected ? '放電中 (回路ON) ⚡' : '回路を切断中 (OFF)'}
+        </button>
+      </div>
+
+      <div class="ctrl-group">
+        <label>2. 素焼き板の操作 【最重要】:</label>
+        <button class="btn-action ${hasSeparator?'secondary':''}" id="bSep" style="${!hasSeparator?'background:#ef4444; border-color:#ef4444;':''}">
+          ${hasSeparator ? '素焼き板あり (正常動作)' : '⚠️ 素焼き板なし (直接ショート)'}
+        </button>
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. 反応の進行: <span id="progVal" class="ctrl-val">${dischargeProgress.toFixed(0)}%</span></label>
+        <input type="range" id="progRange" min="0" max="100" value="${Math.round(dischargeProgress)}">
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn-action secondary" id="bSpeedUp" style="flex:1.5; color:#38bdf8; border-color:#38bdf8; font-size:12px; padding:6px;">
+          ⏩ 時間を急速に進める (+25%)
+        </button>
+        ${isFinished ? `
+        <button class="btn-action" id="bShowResultSpecial" style="flex:2; background:#ea580c; border-color:#ea580c; color:white; font-size:13px; font-weight:bold; padding:6px; box-shadow:0 0 12px rgba(234,88,12,0.6);">
+          🎉 使い切りました！実験結果を見る 🔍
+        </button>
+        ` : ''}
+        <button class="btn-action secondary" id="bResetDaniel" style="flex:1; font-size:12px; padding:6px;">
+          最初に戻す 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('bConnect').onclick = () => {
+      isConnected = !isConnected;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bSep').onclick = () => {
+      hasSeparator = !hasSeparator;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('progRange').oninput = (e) => {
+      dischargeProgress = parseFloat(e.target.value);
+      document.getElementById('progVal').textContent = `${dischargeProgress.toFixed(0)}%`;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bSpeedUp').onclick = () => {
+      dischargeProgress = Math.min(100.0, dischargeProgress + 25.0);
+      document.getElementById('progRange').value = Math.round(dischargeProgress);
+      document.getElementById('progVal').textContent = `${dischargeProgress.toFixed(0)}%`;
+      renderControls();
+      updateStatus();
+    };
+
+    const bRes = document.getElementById('bShowResultSpecial');
+    if (bRes) bRes.onclick = showDischargeResultModal;
+
+    document.getElementById('bResetDaniel').onclick = resetLab;
+  }
+
+  function resetLab() {
+    isConnected = true;
+    hasSeparator = true;
+    dischargeProgress = 0.0;
+    initIons();
+    const modal = document.getElementById('daniellResultModal');
+    if (modal) modal.remove();
+    renderControls();
+    updateStatus();
+  }
+
+  function updateStatus() {
+    if (!hasSeparator) {
+      setStatus("【大事故！素焼き板なしでショート】水溶液が混ざったため、Cu²⁺が直接亜鉛板に触れて電子を奪い、亜鉛板の表面に直接黒い銅が析出しました！導線に電子が流れずプロペラは停止します。（素焼き板の役割：液の混合を防ぎつつイオンだけを通す）", true);
+      return;
+    }
+
+    if (!isConnected) {
+      setStatus("【回路切断中 (OFF)】電子の流れが遮断されているため、化学反応はストップしています。スイッチを入れると起電力約1.1Vが発生します。");
+      return;
+    }
+
+    if (dischargeProgress >= 100.0) {
+      setStatus("【電池を最後まで使い切りました！】硫酸銅水溶液のCu²⁺が消費し尽くされ、亜鉛板も溶け細って寿命を迎えました。下のオレンジのボタンを押して『実験結果（金属写真と解説）』を確認しましょう！");
+      return;
+    }
+
+    const znLoss = (dischargeProgress * 0.05).toFixed(1);
+    const cuGain = (dischargeProgress * 0.05).toFixed(1);
+    setStatus(`【放電中（起電力 約1.10V）】負極(Zn)でZnが電子を放出して溶解(質量-${znLoss}g)。電子が導線を通ってモーターを回し、正極(Cu)でCu²⁺が電子を受け取って銅が析出(質量+${cuGain}g)！硫酸銅の青色は徐々に薄くなります。`);
+  }
+
+  // 結果ポップアップモーダル（数式タグ表記修正版）
+  function showDischargeResultModal() {
+    let modal = document.getElementById('daniellResultModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'daniellResultModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.88)';
+    modal.style.zIndex = '9999';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.padding = '20px';
+    modal.style.cursor = 'pointer';
+
+    const card = document.createElement('div');
+    card.style.background = '#0f172a';
+    card.style.border = '2px solid #ea580c';
+    card.style.borderRadius = '14px';
+    card.style.maxWidth = '640px';
+    card.style.width = '92%';
+    card.style.maxHeight = '90vh';
+    card.style.overflowY = 'auto';
+    card.style.padding = '22px';
+    card.style.boxShadow = '0 0 40px rgba(234, 88, 12, 0.6)';
+    card.style.textAlign = 'center';
+    card.style.color = '#ffffff';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = '🔬 【実験結果】放電後の金属電極と化学変化の全貌';
+    h2.style.color = '#f97316';
+    h2.style.fontSize = '18px';
+    h2.style.marginBottom = '12px';
+    card.appendChild(h2);
+
+    if (electrodeImg.complete && electrodeImg.naturalWidth !== 0) {
+      const img = document.createElement('img');
+      img.src = electrodeImg.src;
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '230px';
+      img.style.borderRadius = '8px';
+      img.style.marginBottom = '12px';
+      img.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+      card.appendChild(img);
+    }
+
+    const desc = document.createElement('div');
+    desc.style.fontSize = '13px';
+    desc.style.lineHeight = '1.7';
+    desc.style.textAlign = 'left';
+    desc.style.background = '#1e293b';
+    desc.style.padding = '14px';
+    desc.style.borderRadius = '8px';
+    desc.style.color = '#f1f5f9';
+    desc.innerHTML = `
+      <strong style="color:#38bdf8;">① 亜鉛板（負極）：質量減少（20.0g ➔ 15.0g）</strong><br>
+      亜鉛はイオン化傾向が大きいため、電子を2個放出して Zn<sup>2+</sup> となって水溶液へ溶け出します。そのため表面が虫食い状にボロボロに削れ、薄く軽くなります。<br>
+      <span style="color:#93c5fd; font-weight:bold;">式：Zn ➔ Zn<sup>2+</sup> ＋ 2e<sup>−</sup></span><br><br>
+
+      <strong style="color:#f43f5e;">② 銅板（正極）：質量増加（20.0g ➔ 25.0g）</strong><br>
+      導線を通ってきた電子を、水溶液中の Cu<sup>2+</sup> が受け取って金属の銅（Cu）に戻ります。銅板の表面に赤褐色の銅がびっしりと析出して厚く重くなります。<br>
+      <span style="color:#fca5a5; font-weight:bold;">式：Cu<sup>2+</sup> ＋ 2e<sup>−</sup> ➔ Cu</span><br><br>
+
+      <strong style="color:#facc15;">③ 硫酸銅水溶液の青色が透明になった理由：</strong><br>
+      青色の正体である Cu<sup>2+</sup>（銅イオン）が次々と金属の銅として析出して減少し、最終的に水溶液中から銅イオンがほぼいなくなったため、無色透明になりました。
+    `;
+    card.appendChild(desc);
+
+    const tip = document.createElement('p');
+    tip.textContent = 'クリックすると閉じて実験室に戻ります';
+    tip.style.fontSize = '12px';
+    tip.style.color = '#94a3b8';
+    tip.style.marginTop = '12px';
+    card.appendChild(tip);
+
+    modal.appendChild(card);
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  }
+
+  renderControls();
   updateStatus();
 
   function render() {
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    const bx = w/2 - 60, by = h/2 - 60, bw = 120, bh = 130;
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(bx, by, bw, bh);
+    const isWorking = isConnected && hasSeparator && dischargeProgress < 100.0;
 
-    let col = "#eab308";
-    if (naohDrops === 10) col = "#22c55e";
-    else if (naohDrops > 10) col = "#3b82f6";
+    if (isWorking) {
+      propellerAngle += 0.28 * (1.0 - dischargeProgress / 120);
+      electronTick += 0.5;
+      dischargeProgress = Math.min(100.0, dischargeProgress + 0.02);
 
-    ctx.fillStyle = col;
-    ctx.fillRect(bx+2, by+30, bw-4, bh-32);
+      const prgEl = document.getElementById('progRange');
+      const valEl = document.getElementById('progVal');
+      if (prgEl && Math.random() < 0.05) {
+        prgEl.value = Math.round(dischargeProgress);
+        valEl.textContent = `${dischargeProgress.toFixed(0)}%`;
+        if (dischargeProgress >= 100.0) {
+          renderControls();
+          updateStatus();
+        }
+      }
+    }
+
+    const leftW = w - 240;
+
+    // 1. 実験ベンチ
+    drawDaniellBench(leftW, h, isWorking);
+
+    // 2. 右側パネル
+    const rightX = w - 230, rightW = 215;
+    drawElectrodePhotoBox(rightX, 15, rightW, 140);
+    drawDaniellSummaryTable(rightX, 165, rightW, h - 180);
 
     animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
-}
-
-// ダニエル電池 (中3・物質)
-function initC3Daniel(canvas) {
-  const ctx = canvas.getContext('2d');
-  let motorRun = true;
-  let t = 0;
-  let animId;
-
-  const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group" style="grid-column: 1 / -1;">
-      <label>回路スイッチ:</label>
-      <button class="btn-action ${motorRun?'':'secondary'}" id="bMotor">${motorRun?'回路を切断する':'回路を接続する (発電)'}</button>
-    </div>
-  `;
-
-  document.getElementById('bMotor').onclick = () => {
-    motorRun = !motorRun;
-    document.getElementById('bMotor').textContent = motorRun ? '回路を切断する' : '回路を接続する (発電)';
-    document.getElementById('bMotor').className = `btn-action ${motorRun?'':'secondary'}`;
-    if (motorRun) {
-      setStatus("【発電中】亜鉛板でZn→Zn²⁺+2e⁻（溶解）、銅板でCu²⁺+2e⁻→Cu（析出）。電子が導線を通ってモーターが回転します！");
-    } else {
-      setStatus("回路を切断しました。電子の移動が止まりました。");
-    }
-  };
-  setStatus("【ダニエル電池】負極の亜鉛板から正極の銅板へと電子が流れ、プロペラが勢いよく回っています！");
-
-  function loop() {
-    if (motorRun) t += 0.2;
-    const w = canvas.width, h = canvas.height;
+  function drawDaniellBench(bw, bh, isWorking) {
     ctx.fillStyle = "#0f172a";
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
 
-    const cx = w/2, cy = h/2;
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🔋 ダニエル電池の仕組みとイオン・電子の移動", 28, 28);
+
+    const { vesselX, vesselY, vesselW, vesselH, cx } = getVesselBounds(bw);
+
+    // 水槽背景
+    // 左室（硫酸亜鉛）：無色透明
+    ctx.fillStyle = "rgba(148, 163, 184, 0.18)";
+    ctx.fillRect(vesselX + 3, vesselY + 25, vesselW / 2 - 3, vesselH - 28);
+
+    // 右室（硫酸銅）：青色（放電で退色）
+    const blueAlpha = Math.max(0.04, 0.55 * (1.0 - dischargeProgress / 100.0));
+    ctx.fillStyle = !hasSeparator ? "rgba(59, 130, 246, 0.35)" : `rgba(14, 165, 233, ${blueAlpha})`;
+    ctx.fillRect(vesselX + vesselW / 2, vesselY + 25, vesselW / 2 - 3, vesselH - 28);
+
+    // 水槽枠
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 3;
-    ctx.strokeRect(cx - 130, cy - 30, 110, 90);
-    ctx.strokeRect(cx + 20, cy - 30, 110, 90);
+    ctx.strokeRect(vesselX, vesselY, vesselW, vesselH);
 
-    ctx.fillStyle = "#94a3b8";
-    ctx.fillRect(cx - 90, cy - 60, 24, 90);
-    ctx.fillStyle = "#f97316";
-    ctx.fillRect(cx + 66, cy - 60, 24, 90);
+    // 素焼き板仕切り
+    if (hasSeparator) {
+      ctx.fillStyle = "#d97706";
+      ctx.fillRect(cx - 3, vesselY + 5, 6, vesselH - 8);
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - 3, vesselY + 5, 6, vesselH - 8);
+
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("素焼き板", cx, vesselY - 6);
+    } else {
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = "#ef4444";
+      ctx.beginPath();
+      ctx.moveTo(cx, vesselY + 5);
+      ctx.lineTo(cx, vesselY + vesselH - 5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("仕切りなし(短絡)", cx, vesselY - 6);
+    }
+
+    // --- 電極の描画 ---
+    const plateTopY = vesselY - 35;
+    const plateH = 135;
+
+    // 1. 亜鉛板（負極）
+    const znX = vesselX + 42;
+    const znThick = Math.max(4, 15 * (1.0 - (dischargeProgress / 100.0) * 0.65));
+    ctx.fillStyle = !hasSeparator ? "#1e293b" : "#94a3b8";
+    ctx.fillRect(znX - znThick / 2, plateTopY, znThick, plateH);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(znX - znThick / 2, plateTopY, znThick, plateH);
+
+    if (dischargeProgress > 20 && hasSeparator) {
+      ctx.fillStyle = "#0f172a";
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(znX - znThick / 2 - 1, plateTopY + 50 + i * 18, 3, 4);
+        ctx.fillRect(znX + znThick / 2 - 2, plateTopY + 58 + i * 18, 3, 4);
+      }
+    }
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("−極: 亜鉛板(Zn)", znX, plateTopY - 14);
+    const znMass = (20.0 - (dischargeProgress * 0.05)).toFixed(1);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(`${znMass}g (溶解↓)`, znX, plateTopY - 3);
+
+    // 2. 銅板（正極）
+    const cuX = vesselX + vesselW - 42;
+    const cuThick = 13 + (dischargeProgress / 100.0) * 12;
+    ctx.fillStyle = "#b45309";
+    ctx.fillRect(cuX - 6, plateTopY, 12, plateH);
+
+    if (dischargeProgress > 8) {
+      ctx.fillStyle = "#ea580c";
+      ctx.fillRect(cuX - cuThick / 2, plateTopY + 38, cuThick, plateH - 38);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(cuX - cuThick / 2 - 2, plateTopY + 45 + i * 16, 3, 4);
+        ctx.fillRect(cuX + cuThick / 2 - 1, plateTopY + 52 + i * 16, 3, 4);
+      }
+    }
+    ctx.strokeStyle = "#f97316";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(cuX - cuThick / 2, plateTopY, cuThick, plateH);
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("＋極: 銅板(Cu)", cuX, plateTopY - 14);
+    const cuMass = (20.0 + (dischargeProgress * 0.05)).toFixed(1);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(`${cuMass}g (析出↑)`, cuX, plateTopY - 3);
+
+    // --- 導線・電圧計・モーター ---
+    const wireY = 52;
+    ctx.strokeStyle = isWorking ? "#facc15" : "#475569";
+    ctx.lineWidth = 2.5;
+
+    // 導線
+    ctx.beginPath();
+    ctx.moveTo(znX, plateTopY);
+    ctx.lineTo(znX, wireY);
+    ctx.lineTo(cuX, wireY);
+    ctx.lineTo(cuX, plateTopY);
+    ctx.stroke();
+
+    // 電圧計
+    drawVoltmeter(znX + 28, wireY - 15, 34, 30, isWorking ? 1.10 : 0.0);
+
+    // モーター ＆ プロペラ
+    const motorX = cuX - 32;
+    drawMotorPropeller(motorX, wireY, propellerAngle, isWorking);
+
+    // 電子と電流の向きラベル
+    const midWireX = (znX + cuX) / 2 + 5;
+    if (isWorking) {
+      ctx.fillStyle = "#facc15";
+      for (let i = 0; i < 6; i++) {
+        const span = (cuX - znX);
+        const p = ((electronTick * 2.8 + i * 35) % span);
+        ctx.beginPath();
+        ctx.arc(znX + p, wireY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("電子(e⁻)の移動 ➔", midWireX, wireY - 7);
+      ctx.fillStyle = "#f43f5e";
+      ctx.fillText("⬅ 電流の向き(＋➔−)", midWireX, wireY + 18);
+    }
+
+    // --- 水溶液中のイオンモデル ---
+    ions.forEach(ion => {
+      ion.x += ion.vx;
+      ion.y += ion.vy;
+
+      // 外壁バウンド
+      if (ion.x < vesselX + 10) { ion.x = vesselX + 10; ion.vx *= -1; }
+      if (ion.x > vesselX + vesselW - 10) { ion.x = vesselX + vesselW - 10; ion.vx *= -1; }
+      if (ion.y < vesselY + 30) { ion.y = vesselY + 30; ion.vy *= -1; }
+      if (ion.y > vesselY + vesselH - 12) { ion.y = vesselY + vesselH - 12; ion.vy *= -1; }
+
+      // 素焼き板の境界
+      if (hasSeparator) {
+        if (ion.type.startsWith("SO4")) {
+          if (isWorking && ion.type === "SO4_R" && ion.x < cx) {
+            ion.type = "SO4_L";
+          }
+        } else {
+          if (ion.x > cx - 6 && ion.x < cx + 6) ion.vx *= -1;
+        }
+      }
+
+      drawIon(ion.x, ion.y, ion.type);
+    });
+
+    // 下部：両極の化学反応式
+    drawDaniellFormulaBar(25, bh - 60, bw - 45, 42);
+  }
+
+  function drawIon(x, y, type) {
+    ctx.save();
+    let col = "#ffffff";
+    let text = "";
+
+    if (type === "Zn2") {
+      col = "#94a3b8"; text = "Zn²⁺";
+    } else if (type === "Cu2") {
+      col = "#38bdf8"; text = "Cu²⁺";
+    } else {
+      col = "#c084fc"; text = "SO₄²⁻";
+    }
+
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = type === "Zn2" ? "#000000" : "#ffffff";
+    ctx.font = "bold 7px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(text, x, y + 2.5);
+    ctx.restore();
+  }
+
+  function drawVoltmeter(x, y, w, h, val) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("電圧計", x + w / 2, y + 9);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px monospace";
+    ctx.fillText(`${val.toFixed(2)}V`, x + w / 2, y + 22);
+  }
+
+  function drawMotorPropeller(mx, my, angle, isWorking) {
+    ctx.fillStyle = "#334155";
+    ctx.beginPath();
+    ctx.arc(mx, my, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
     ctx.save();
-    ctx.translate(cx, cy - 90);
-    ctx.rotate(t);
-    ctx.strokeStyle = "#22c55e";
-    ctx.lineWidth = 6;
+    ctx.translate(mx, my);
+    ctx.rotate(angle);
+    ctx.fillStyle = isWorking ? "#22c55e" : "#64748b";
     ctx.beginPath();
-    ctx.moveTo(-25, 0); ctx.lineTo(25, 0);
-    ctx.stroke();
+    ctx.ellipse(0, 0, 16, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 3.5, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
-
-    animId = requestAnimationFrame(loop);
   }
-  loop();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  function drawDaniellFormulaBar(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📝 ダニエル電池の両極の反応式（入試超頻出）：", bx + 8, by + 13);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("【−極(Zn)】 Zn ➔ Zn²⁺ ＋ 2e⁻ （亜鉛が溶けて電子を放出）", bx + 8, by + 26);
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.fillText("【＋極(Cu)】 Cu²⁺ ＋ 2e⁻ ➔ Cu （銅イオンが電子を受け取り銅が析出）", bx + 8, by + 37);
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawElectrodePhotoBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: 反応後の両電極", bx + 8, by + 16);
+
+    if (electrodeImg.complete && electrodeImg.naturalWidth !== 0) {
+      ctx.drawImage(electrodeImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("crystal_daniell_electrodes.jpg", bx + bw / 2, by + bh / 2);
+      ctx.fillText("実写画像待機中", bx + bw / 2, by + bh / 2 + 15);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 20, bw - 16, 16);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("左: 溶けた亜鉛板 / 右: 銅が析出した銅板", bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：入試完璧整理対照表
+  // ========================================================
+  function drawDaniellSummaryTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 電極ごとの変化まとめ（テスト必出）", bx + 8, by + 16);
+
+    const rows = [
+      { item: "極の種類", zn: "−極 (負極)", cu: "＋極 (正極)" },
+      { item: "イオン化傾向", zn: "大 (Zn)", cu: "小 (Cu)" },
+      { item: "電極の質量", zn: "減少 ⬇️ (溶ける)", cu: "増加 ⬆️ (析出)" },
+      { item: "水溶液の色", zn: "変化なし(無色)", cu: "青色が薄くなる" },
+      { item: "電子のやり取り", zn: "電子を失う", cu: "電子を受け取る" }
+    ];
+
+    ctx.font = "9px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("項目", bx + 8, by + 34);
+    ctx.fillText("亜鉛板(Zn)", bx + 70, by + 34);
+    ctx.fillText("銅板(Cu)", bx + 145, by + 34);
+
+    rows.forEach((r, idx) => {
+      const iy = by + 48 + idx * 23;
+      ctx.fillStyle = "#cbd5e1";
+      ctx.textAlign = "left";
+      ctx.fillText(r.item, bx + 8, iy);
+
+      ctx.fillStyle = (idx === 2) ? "#38bdf8" : "#e2e8f0";
+      ctx.fillText(r.zn, bx + 70, iy);
+
+      ctx.fillStyle = (idx === 2) ? "#f43f5e" : "#e2e8f0";
+      ctx.fillText(r.cu, bx + 145, iy);
+    });
+
+    const footY = by + bh - 38;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 32);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【素焼き板の記述対策】：", bx + 10, footY + 12);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("2液の混合を防ぎ、イオンを通すため。", bx + 10, footY + 23);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('daniellResultModal');
+      if (modal) modal.remove();
+    }
+  };
 }
 
-// メンデルの遺伝の規則性 (中3・生命)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【究極覚醒版】メンデルの遺伝の規則性とサヤ割り収穫ガチャ (中3・生命)
+// ===================================================================
 function initC3Mendel(canvas) {
   const ctx = canvas.getContext('2d');
-  let f2Generated = false;
+
+  // --- 実験状態 ---
+  let stepMode = 'f2';          // 'p_to_f1'(親➔子), 'f2'(子➔孫), 'test_cross'(検定交配)
+  let roundCount = 0;           // 収穫された丸豆の総数
+  let wrinkledCount = 0;        // 収穫されたしわ豆の総数
+  let flyingBeans = [];         // 飛び出す豆の物理パーティクル
+  let podOpenAngle = 0.0;       // サヤが開くアニメーション角度 (0.0〜1.0)
+  let animId;
+  let tick = 0;
+
+  // 検定交配の隠し親
+  let mysteryParent = 'Aa';
+  let testCrossHarvest = { round: 0, wrinkled: 0 };
+
+  // 実写写真（丸エンドウとしわエンドウ）
+  const peaPhotoImg = new Image();
+  peaPhotoImg.src = 'mendel_peas_seeds.jpg';
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group" style="grid-column: 1 / -1;">
-      <label>遺伝実験ステップ:</label>
-      <div style="display:flex; gap:10px;">
-        <button class="btn-action" id="bF1">親(AA × aa) 交配 → 子(F1)生成</button>
-        <button class="btn-action secondary" id="bF2">子(Aa) 自家受粉 → 孫(F2)生成</button>
+
+  function renderControls() {
+    const total = roundCount + wrinkledCount;
+    const ratioText = wrinkledCount > 0 ? (roundCount / wrinkledCount).toFixed(2) + " : 1" : "―";
+
+    controls.innerHTML = `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>1. 実験・世代モードの選択:</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn-action ${stepMode==='p_to_f1'?'':'secondary'}" id="bModeF1">
+            ① 親(AA×aa) ➔ 子(F1)生成 【優性の法則】
+          </button>
+          <button class="btn-action ${stepMode==='f2'?'':'secondary'}" id="bModeF2" style="${stepMode==='f2'?'background:#0d9488; border-color:#0d9488;':''}">
+            ② 子(Aa×Aa) ➔ 孫(F2)受粉 【分離の法則・3:1 ガチャ】
+          </button>
+          <button class="btn-action ${stepMode==='test_cross'?'':'secondary'}" id="bModeTest" style="${stepMode==='test_cross'?'background:#ea580c; border-color:#ea580c;':''}">
+            🔍 検定交配チャレンジ (丸豆の遺伝子型を暴く)
+          </button>
+        </div>
       </div>
-    </div>
-  `;
 
-  document.getElementById('bF1').onclick = () => {
-    f2Generated = false;
-    setStatus("【子の代 (F1)】すべて遺伝子型は『Aa』となり、優性の形質である『丸』だけが現れます。");
-  };
-  document.getElementById('bF2').onclick = () => {
-    f2Generated = true;
-    setStatus("【孫の代 (F2)】AA : Aa : aa = 1 : 2 : 1。見た目（表現型）は【丸 : しわ ＝ 3 : 1】の規則的な分離比が現れました！");
-  };
-  setStatus("親の代：丸(AA) と しわ(aa) から実験をスタートしましょう。");
+      ${stepMode === 'f2' ? `
+      <div class="ctrl-group">
+        <label>2. 孫(F2)のサヤを収穫する (大数の法則ガチャ):</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-action" id="bHarvestOne" style="flex:1; background:#10b981; border-color:#10b981; font-weight:bold; padding:8px 4px; font-size:12px;">サヤを割る！ (4粒) 🫛</button>
+          <button class="btn-action" id="bHarvest100" style="flex:1; background:#0284c7; border-color:#0284c7; padding:8px 4px; font-size:12px;">100粒一括受粉 ⚡</button>
+          <button class="btn-action" id="bHarvest1000" style="flex:1; background:#7c3aed; border-color:#7c3aed; padding:8px 4px; font-size:12px;">1000粒超受粉 🚀</button>
+        </div>
+      </div>
 
+      <div class="ctrl-group">
+        <label>累計収穫カウント & 理論比率への収束:</label>
+        <div style="font-size:12px; line-height:1.6; color:#cbd5e1;">
+          収穫累計: <strong style="color:#ffffff; font-size:13px;">${total} 粒</strong> 
+          (丸: <span style="color:#4ade80; font-weight:bold;">${roundCount}</span> / 
+          しわ: <span style="color:#f59e0b; font-weight:bold;">${wrinkledCount}</span>)<br>
+          現在の比率 ➔ <strong style="color:#facc15; font-size:15px; font-family:monospace;">${ratioText}</strong> 
+          <small style="color:#94a3b8;">(理論値 3.00 : 1)</small>
+        </div>
+      </div>
+      ` : ''}
+
+      ${stepMode === 'test_cross' ? `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>丸豆(？) と しわ豆(aa) の交配実験:</label>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-action" id="bTestCrossDrip" style="flex:1; background:#0284c7; border-color:#0284c7;">交配して子を100粒収穫する</button>
+          <button class="btn-action secondary" id="bNewMystery" style="flex:1;">別の丸豆を選ぶ 🔄</button>
+        </div>
+        <div style="margin-top:8px; font-size:12px; color:#cbd5e1;">
+          子の出現数 ➔ 丸: <strong style="color:#4ade80;">${testCrossHarvest.round}</strong> 粒 ／ しわ: <strong style="color:#f59e0b;">${testCrossHarvest.wrinkled}</strong> 粒
+          ${(testCrossHarvest.round + testCrossHarvest.wrinkled > 0) ? `
+            <span style="margin-left:10px; font-weight:bold; color:#facc15;">
+              判別結果：この丸豆の遺伝子型は【 ${testCrossHarvest.wrinkled > 0 ? 'Aa (雑種)' : 'AA (純系)'} 】確定！
+            </span>
+          ` : ''}
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bResetStats" style="width:100%; font-size:12px; padding:6px;">
+          実験カウントをリセット 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('bModeF1').onclick = () => { stepMode = 'p_to_f1'; renderControls(); updateStatus(); };
+    document.getElementById('bModeF2').onclick = () => { stepMode = 'f2'; renderControls(); updateStatus(); };
+    document.getElementById('bModeTest').onclick = () => {
+      stepMode = 'test_cross';
+      mysteryParent = Math.random() < 0.5 ? 'AA' : 'Aa';
+      testCrossHarvest = { round: 0, wrinkled: 0 };
+      renderControls();
+      updateStatus();
+    };
+
+    if (stepMode === 'f2') {
+      document.getElementById('bHarvestOne').onclick = () => harvestF2(4, true);
+      document.getElementById('bHarvest100').onclick = () => harvestF2(100, false);
+      document.getElementById('bHarvest1000').onclick = () => harvestF2(1000, false);
+    }
+
+    if (stepMode === 'test_cross') {
+      document.getElementById('bTestCrossDrip').onclick = () => {
+        let r = 0, w = 0;
+        for (let i = 0; i < 100; i++) {
+          if (mysteryParent === 'AA') {
+            r++;
+          } else {
+            Math.random() < 0.5 ? r++ : w++;
+          }
+        }
+        testCrossHarvest.round += r;
+        testCrossHarvest.wrinkled += w;
+        renderControls();
+        updateStatus();
+      };
+      document.getElementById('bNewMystery').onclick = () => {
+        mysteryParent = Math.random() < 0.5 ? 'AA' : 'Aa';
+        testCrossHarvest = { round: 0, wrinkled: 0 };
+        renderControls();
+        updateStatus();
+      };
+    }
+
+    document.getElementById('bResetStats').onclick = () => {
+      roundCount = 0;
+      wrinkledCount = 0;
+      flyingBeans = [];
+      podOpenAngle = 0.0;
+      testCrossHarvest = { round: 0, wrinkled: 0 };
+      renderControls();
+      updateStatus();
+    };
+  }
+
+  // 収穫処理
+  function harvestF2(count, isVisual) {
+    let newRound = 0;
+    let newWrinkled = 0;
+
+    if (isVisual) {
+      podOpenAngle = 1.0; // サヤが開く
+    }
+
+    for (let i = 0; i < count; i++) {
+      const egg = Math.random() < 0.5 ? 'A' : 'a';
+      const pollen = Math.random() < 0.5 ? 'A' : 'a';
+      const isRound = !(egg === 'a' && pollen === 'a');
+
+      if (isRound) newRound++;
+      else newWrinkled++;
+
+      if (isVisual) {
+        flyingBeans.push({
+          isRound: isRound,
+          x: (canvas.width - 240) / 2 - 45 + (i * 30),
+          y: 165,
+          vx: (Math.random() - 0.5) * 3.5,
+          vy: -4 - Math.random() * 3,
+          rot: Math.random() * Math.PI * 2,
+          rotV: (Math.random() - 0.5) * 0.2
+        });
+      }
+    }
+
+    roundCount += newRound;
+    wrinkledCount += newWrinkled;
+
+    if (flyingBeans.length > 24) flyingBeans.splice(0, flyingBeans.length - 24);
+
+    renderControls();
+    updateStatus();
+  }
+
+  function updateStatus() {
+    if (stepMode === 'p_to_f1') {
+      setStatus("【優性の法則 (F1)】丸の純系(AA)としわの純系(aa)を交配すると、子はすべて『Aa』となり、優性の形質である『丸』だけが現れます。しわの形質(a)は消えたのではなく潜伏しています！");
+    } else if (stepMode === 'f2') {
+      const total = roundCount + wrinkledCount;
+      if (total === 0) {
+        setStatus("【分離の法則 (F2)】子(Aa)を自家受粉させます。「サヤを割る！」ボタンや一括受粉を押して、豆が飛び出すガチャを回してみましょう！");
+      } else {
+        const ratio = (wrinkledCount > 0) ? (roundCount / wrinkledCount).toFixed(2) : "―";
+        setStatus(`【大数の法則の実証】累計${total}粒収穫中！丸: ${roundCount}個 ／ しわ: ${wrinkledCount}個 ➔ 比率『${ratio} : 1』！受粉数を増やすほど、理論値【 3.00 : 1 】に吸い寄せられていきます！`);
+      }
+    } else {
+      setStatus("【検定交配チャレンジ】見た目は同じ丸豆ですが、遺伝子型が純系(AA)なのか雑種(Aa)なのか判別できますか？しわ(aa)と交配して、子にしわが出るか確かめましょう！");
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
   function render() {
+    tick += 0.04;
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "16px sans-serif";
+    const leftW = w - 240;
 
-    if (!f2Generated) {
-      ctx.fillText("【親】丸(AA) × しわ(aa)", w/2 - 100, h/2 - 40);
-      ctx.fillText("↓ 減数分裂と受精", w/2 - 70, h/2);
-      ctx.fillText("【子 (F1)】すべて 丸 (Aa)", w/2 - 90, h/2 + 40);
-    } else {
-      ctx.fillText("【孫 (F2) プネット方格】", w/2 - 80, h/2 - 60);
-      ctx.fillText("AA (丸) : Aa (丸) : aa (しわ)", w/2 - 100, h/2 - 10);
-      ctx.fillStyle = "#22c55e";
-      ctx.fillText("丸 ： しわ ＝ ３ ： １", w/2 - 70, h/2 + 40);
-    }
+    // 1. メイン実験ステージ
+    drawMendelStage(leftW, h);
+
+    // 2. 右側パネル（実写写真枠 & ハイエンドプネット方格）
+    const rightX = w - 230, rightW = 215;
+    drawPeaPhotoBox(rightX, 15, rightW, 140);
+    drawPunnettSquarePanel(rightX, 165, rightW, h - 180);
+
+    animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => {} };
+  // ========================================================
+  // A. メイン実験ステージ（被りを完全解消した黄金レイアウト）
+  // ========================================================
+  function drawMendelStage(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🫛 メンデルのエンドウ交配実験とサヤ収穫シミュレーター", 28, 28);
+
+    const cx = bw / 2 - 15;
+
+    if (stepMode === 'p_to_f1') {
+      drawParentToF1Cross(cx, bh);
+    } else if (stepMode === 'f2') {
+      drawF2PodHarvest(cx, bh);
+    } else {
+      drawTestCrossView(cx, bh);
+    }
+
+    // 下部：遺伝用語解説バー
+    drawMendelTerminologyBar(25, bh - 60, bw - 45, 42);
+  }
+
+  // ① 親 ➔ 子 (F1) のグラフィック（重なりをミリ単位で解消）
+  function drawParentToF1Cross(cx, bh) {
+    // 親世代 (P)
+    const pY = 65;
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("【親の代 (P)】 純系同士のかけ合わせ", cx, pY - 8);
+
+    // 親1：丸 (AA)
+    drawRealisticPea(cx - 90, pY + 22, 17, true, "AA", "#22c55e");
+    ctx.fillStyle = "#4ade80";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("丸 (純系 AA)", cx - 90, pY + 52);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText("×", cx, pY + 22);
+
+    // 親2：しわ (aa)
+    drawRealisticPea(cx + 90, pY + 22, 17, false, "aa", "#f59e0b");
+    ctx.fillStyle = "#f59e0b";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("しわ (純系 aa)", cx + 90, pY + 52);
+
+    // 減数分裂の矢印と生殖細胞
+    const gameteY = pY + 78;
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 90, pY + 58); ctx.lineTo(cx - 35, gameteY);
+    ctx.moveTo(cx + 90, pY + 58); ctx.lineTo(cx + 35, gameteY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillText("生殖細胞: A", cx - 45, gameteY + 4);
+    ctx.fillText("生殖細胞: a", cx + 45, gameteY + 4);
+
+    // 受精の矢印
+    ctx.beginPath();
+    ctx.moveTo(cx - 20, gameteY + 8); ctx.lineTo(cx, gameteY + 28);
+    ctx.moveTo(cx + 20, gameteY + 8); ctx.lineTo(cx, gameteY + 28);
+    ctx.stroke();
+
+    // 子の代 (F1) - サヤと文字の重なりを完全解消（Y=185とY=220に分離）
+    const f1TextY = gameteY + 42;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText("【子の代 (F1)】 すべて丸（雑種 Aa）", cx, f1TextY);
+
+    const podY = f1TextY + 38;
+    // 美麗なエンドウのサヤ（中身は全てきれいな丸豆 Aa）
+    drawRealisticPod(cx - 85, podY, 170, [true, true, true, true], "Aa", 0.0);
+  }
+
+  // ② 孫 (F2) のサヤ割りと弾け飛ぶガチャ演出
+  function drawF2PodHarvest(cx, bh) {
+    const topY = 65;
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("【孫の代 (F2)】 自家受粉サヤ割りガチャ", cx, topY - 8);
+
+    // サヤが開くアニメーション
+    if (podOpenAngle > 0.05) podOpenAngle -= 0.03;
+    else podOpenAngle = 0.0;
+
+    const podY = topY + 55;
+    drawRealisticPod(cx - 95, podY, 190, [true, true, false, true], "Aa", podOpenAngle);
+
+    // 飛び散る豆の物理シミュレーション描画
+    flyingBeans.forEach(b => {
+      b.y += b.vy;
+      b.x += b.vx;
+      b.vy += 0.22; // 重力
+      b.rot += b.rotV;
+
+      if (b.y > bh - 90) {
+        b.y = bh - 90;
+        b.vy *= -0.4; // 地面バウンド
+        b.vx *= 0.8;
+      }
+
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      drawRealisticPea(0, 0, 11, b.isRound, b.isRound ? "丸" : "しわ", b.isRound ? "#22c55e" : "#f59e0b");
+      ctx.restore();
+    });
+
+    // 収穫比率バーメーター（ターゲット収束）
+    const total = roundCount + wrinkledCount;
+    if (total > 0) {
+      const meterW = 220, meterH = 16;
+      const mx = cx - meterW / 2, my = topY + 115;
+
+      const roundRatio = roundCount / total;
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(mx, my, meterW, meterH);
+
+      // 丸豆（緑）としわ豆（橙）の帯
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(mx, my, meterW * roundRatio, meterH);
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillRect(mx + meterW * roundRatio, my, meterW * (1 - roundRatio), meterH);
+
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(mx, my, meterW, meterH);
+
+      // 理論値 75% (3:1) のインジケーターライン
+      const targetX = mx + meterW * 0.75;
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(targetX, my - 6);
+      ctx.lineTo(targetX, my + meterH + 6);
+      ctx.stroke();
+
+      ctx.fillStyle = "#facc15";
+      ctx.font = "bold 9px sans-serif";
+      ctx.fillText("理論値 75% (3:1)", targetX, my - 9);
+
+      // 豆の累計数表示
+      ctx.fillStyle = "#4ade80";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(`丸: ${roundCount}粒 (${(roundRatio * 100).toFixed(1)}%)`, mx, my + meterH + 15);
+
+      ctx.fillStyle = "#f59e0b";
+      ctx.textAlign = "right";
+      ctx.fillText(`しわ: ${wrinkledCount}粒 (${((1 - roundRatio) * 100).toFixed(1)}%)`, mx + meterW, my + meterH + 15);
+    }
+  }
+
+  // ③ 検定交配の画面
+  function drawTestCrossView(cx, bh) {
+    const topY = 70;
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("【検定交配】謎の丸豆の遺伝子型を暴く！", cx, topY - 10);
+
+    // 謎の丸豆
+    drawRealisticPea(cx - 80, topY + 30, 19, true, "？", "#22c55e");
+    ctx.fillStyle = "#4ade80";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("丸豆 (AA か Aa？)", cx - 80, topY + 62);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("×", cx, topY + 30);
+
+    // 判定相手：しわ豆 (aa)
+    drawRealisticPea(cx + 80, topY + 30, 19, false, "aa", "#f59e0b");
+    ctx.fillStyle = "#f59e0b";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText("しわ豆 (劣性純系 aa)", cx + 80, topY + 62);
+
+    // 判定ロジック解説カード
+    const cardY = topY + 80;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(cx - 130, cardY, 260, 52);
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx - 130, cardY, 260, 52);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("・子にしわ(aa)が1粒でも出る ➔ 親は【 Aa 】確定！", cx - 118, cardY + 20);
+    ctx.fillText("・子がすべて丸(Aa)になる ➔ 親は【 AA 】確定！", cx - 118, cardY + 38);
+  }
+
+  // 立体的なエンドウ豆（ハイライト・陰影付き）
+  function drawRealisticPea(x, y, r, isRound, label, baseColor) {
+    ctx.save();
+
+    if (isRound) {
+      // 丸豆（球体のグラデーション）
+      const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+      grad.addColorStop(0, "#86efac");
+      grad.addColorStop(0.5, baseColor);
+      grad.addColorStop(1, "#14532d");
+      ctx.fillStyle = grad;
+
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // 光沢ハイライト
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.beginPath();
+      ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // しわ豆（凹凸・しわの入った多角形）
+      ctx.fillStyle = baseColor;
+      ctx.beginPath();
+      ctx.moveTo(x - r, y - r * 0.3);
+      ctx.lineTo(x - r * 0.4, y - r);
+      ctx.lineTo(x + r * 0.5, y - r * 0.8);
+      ctx.lineTo(x + r, y - r * 0.2);
+      ctx.lineTo(x + r * 0.8, y + r * 0.7);
+      ctx.lineTo(x - r * 0.1, y + r);
+      ctx.lineTo(x - r * 0.9, y + r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#78350f";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // しわの陰影ライン
+      ctx.strokeStyle = "rgba(120, 53, 15, 0.7)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.4, y - r * 0.3);
+      ctx.lineTo(x + r * 0.2, y);
+      ctx.lineTo(x + r * 0.5, y + r * 0.4);
+      ctx.moveTo(x, y - r * 0.5);
+      ctx.lineTo(x - r * 0.2, y + r * 0.3);
+      ctx.stroke();
+    }
+
+    // ラベル
+    ctx.fillStyle = isRound ? "#052e16" : "#451a03";
+    ctx.font = "bold 8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, x, y + 3);
+
+    ctx.restore();
+  }
+
+  // 本物の形状を持つエンドウのサヤ（開閉アニメーション対応）
+  function drawRealisticPod(x, y, w, beansBoolArray, label, openRatio) {
+    ctx.save();
+
+    const podH = 26;
+    const splitOffset = openRatio * 14;
+
+    // サヤ上半分（上へ開く）
+    ctx.fillStyle = "#15803d";
+    ctx.strokeStyle = "#4ade80";
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y - splitOffset);
+    ctx.quadraticCurveTo(x + w * 0.5, y - podH - splitOffset, x + w, y - splitOffset);
+    ctx.lineTo(x + w + 8, y - 4 - splitOffset); // 先端の尖り
+    ctx.quadraticCurveTo(x + w * 0.5, y - 4 - splitOffset, x, y - splitOffset);
+    ctx.fill();
+    ctx.stroke();
+
+    // サヤ下半分（下へ開く）
+    ctx.beginPath();
+    ctx.moveTo(x, y + splitOffset);
+    ctx.quadraticCurveTo(x + w * 0.5, y + podH + splitOffset, x + w, y + splitOffset);
+    ctx.lineTo(x + w + 8, y + 4 + splitOffset);
+    ctx.quadraticCurveTo(x + w * 0.5, y + 4 + splitOffset, x, y + splitOffset);
+    ctx.fill();
+    ctx.stroke();
+
+    // サヤのヘタ（左側）
+    ctx.fillStyle = "#166534";
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y - 8);
+    ctx.lineTo(x + 4, y);
+    ctx.lineTo(x - 8, y + 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // 中に並ぶ豆
+    if (openRatio < 0.6) {
+      const step = w / (beansBoolArray.length + 1);
+      beansBoolArray.forEach((isR, idx) => {
+        const bx = x + step * (idx + 1);
+        drawRealisticPea(bx, y, 10, isR, label, isR ? "#22c55e" : "#f59e0b");
+      });
+    }
+
+    ctx.restore();
+  }
+
+  function drawMendelTerminologyBar(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📝 メンデルの遺伝の重要キーワード（入試必出）：", bx + 8, by + 13);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("・優性の法則: 対立形質をかけ合わせると、F1には優性の形質(丸)のみが現れる。", bx + 8, by + 25);
+    ctx.fillText("・分離の法則: 対になる遺伝子は減数分裂で分かれて別の生殖細胞に入る (F2比率 3:1)。", bx + 8, by + 36);
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawPeaPhotoBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: エンドウの丸豆としわ豆", bx + 8, by + 16);
+
+    if (peaPhotoImg.complete && peaPhotoImg.naturalWidth !== 0) {
+      ctx.drawImage(peaPhotoImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("mendel_peas_seeds.jpg", bx + bw / 2, by + bh / 2);
+      ctx.fillText("実写画像待機中", bx + bw / 2, by + bh / 2 + 15);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 20, bw - 16, 16);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("左: 丸(優性) / 右: しわ(劣性)", bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：ハイエンド・プネット方格（四角い交配表）
+  // ========================================================
+  function drawPunnettSquarePanel(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 孫(F2)のプネット方格 (交配表)", bx + 8, by + 16);
+
+    const gx = bx + 45, gy = by + 34;
+    const cw = 65, ch = 38;
+
+    // 表頭
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("精子＼卵", gx - 20, gy - 6);
+    ctx.fillText("A", gx + cw / 2, gy - 6);
+    ctx.fillText("a", gx + cw * 1.5, gy - 6);
+    ctx.fillText("A", gx - 14, gy + ch * 0.6);
+    ctx.fillText("a", gx - 14, gy + ch * 1.6);
+
+    // 4マス (AA, Aa, Aa, aa)
+    const cells = [
+      { r: 0, c: 0, gene: "AA", isR: true,  col: "#14532d" },
+      { r: 0, c: 1, gene: "Aa", isR: true,  col: "#166534" },
+      { r: 1, c: 0, gene: "Aa", isR: true,  col: "#166534" },
+      { r: 1, c: 1, gene: "aa", isR: false, col: "#78350f" }
+    ];
+
+    cells.forEach(cell => {
+      const cx = gx + cell.c * cw;
+      const cy = gy + cell.r * ch;
+
+      ctx.fillStyle = cell.col;
+      ctx.fillRect(cx, cy, cw, ch);
+      ctx.strokeStyle = "#475569";
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(cx, cy, cw, ch);
+
+      ctx.fillStyle = cell.isR ? "#4ade80" : "#facc15";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(cell.gene, cx + cw / 2, cy + 17);
+      ctx.font = "9px sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(cell.isR ? "(丸)" : "(しわ★)", cx + cw / 2, cy + 30);
+    });
+
+    // 比率まとめ
+    const footY = by + bh - 40;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 34);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【比率の超頻出ポイント】", bx + 10, footY + 12);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("・遺伝子型比 ➔ AA : Aa : aa ＝ 1 : 2 : 1", bx + 10, footY + 22);
+    ctx.fillText("・表現型(見た目) ➔ 丸 : しわ ＝ 3 : 1", bx + 10, footY + 31);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+    }
+  };
 }
 
-// 力学的エネルギー (中3・エネルギー)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【車輪接地＆グラフ完全吸着修正版】力学的エネルギー (中3・エネルギー)
+// ===================================================================
 function initC3Motion(canvas) {
   const ctx = canvas.getContext('2d');
-  let height = 30;
-  let isRunning = false;
-  let cartX = 40;
+
+  // --- 実験パラメータ ---
+  let startHeight = 20;         // スタート高さ (cm: 10〜40)
+  let cartMassMultiplier = 1;   // 台車の重さ (1:標準, 2:おもり2倍)
+  let isRunning = false;        // 走行中フラグ
   let animId;
 
+  // 物理状態
+  let cartProgress = 0.0;       // レール上の位置 (0.0:スタート 〜 1.0:斜面終点)
+  let cartSpeed = 0.0;          // 現在の速さ (m/s)
+  let bottomSpeed = 0.0;        // 最下点通過時の速さ (m/s)
+  let woodBlockX = 0.0;         // 木片の押し出し移動距離 (cm)
+  let woodSlideVelocity = 0.0;  // 木片のスライド速度
+
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>斜面のスタート高: <span id="hVal" class="ctrl-val">${height} cm</span></label>
-      <input type="range" id="hRange" min="10" max="50" value="${height}">
-    </div>
-    <div class="ctrl-group">
-      <label>台車を発進:</label>
-      <button class="btn-action" id="bRun">手をはなす 🚗</button>
-    </div>
-  `;
 
-  document.getElementById('hRange').oninput = (e) => {
-    height = parseInt(e.target.value);
-    document.getElementById('hVal').textContent = `${height} cm`;
-  };
-  document.getElementById('bRun').onclick = () => {
-    isRunning = true;
-    cartX = 40;
-    const speed = Math.sqrt(height * 2).toFixed(1);
-    setStatus(`【力学的エネルギー保存】位置エネルギーが運動エネルギーに変換され、最下点での速度は約 ${speed} m/s に達しました！`);
-  };
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. スタートの高さ: <span id="hVal" class="ctrl-val">${startHeight} cm</span></label>
+        <input type="range" id="hRange" min="10" max="40" step="5" value="${startHeight}" ${isRunning?'disabled':''}>
+      </div>
 
-  function loop() {
+      <div class="ctrl-group">
+        <label>2. 台車の質量 (おもりの追加):</label>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-action ${cartMassMultiplier===1?'':'secondary'}" id="bMass1" ${isRunning?'disabled':''}>標準 (台車のみ)</button>
+          <button class="btn-action ${cartMassMultiplier===2?'':'secondary'}" id="bMass2" style="${cartMassMultiplier===2?'background:#ea580c; border-color:#ea580c;':''}" ${isRunning?'disabled':''}>おもり搭載 (質量2倍) 🏋️</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. 発進操作:</label>
+        <button class="btn-action" id="bLaunch" style="background:#10b981; border-color:#10b981; font-size:14px; font-weight:bold; width:100%;" ${isRunning?'disabled':''}>
+          🚀 手をはなす（滑走＆衝突実験！）
+        </button>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bResetMotion" style="width:100%; font-size:12px; padding:6px;">
+          実験台をリセット 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('hRange').oninput = (e) => {
+      startHeight = parseInt(e.target.value);
+      document.getElementById('hVal').textContent = `${startHeight} cm`;
+      resetPhysics();
+      updateStatus();
+    };
+
+    document.getElementById('bMass1').onclick = () => {
+      cartMassMultiplier = 1;
+      renderControls();
+      resetPhysics();
+      updateStatus();
+    };
+
+    document.getElementById('bMass2').onclick = () => {
+      cartMassMultiplier = 2;
+      renderControls();
+      resetPhysics();
+      updateStatus();
+    };
+
+    document.getElementById('bLaunch').onclick = () => {
+      if (!isRunning) {
+        isRunning = true;
+        cartProgress = 0.0;
+        woodBlockX = 0.0;
+        woodSlideVelocity = 0.0;
+        bottomSpeed = 0.0;
+        renderControls();
+        updateStatus();
+      }
+    };
+
+    document.getElementById('bResetMotion').onclick = () => {
+      resetPhysics();
+      renderControls();
+      updateStatus();
+    };
+  }
+
+  function resetPhysics() {
+    isRunning = false;
+    cartProgress = 0.0;
+    cartSpeed = 0.0;
+    bottomSpeed = 0.0;
+    woodBlockX = 0.0;
+    woodSlideVelocity = 0.0;
+  }
+
+  // 木片移動距離の理論値 (cm)
+  function getTheoreticalDistance() {
+    return (startHeight / 40.0) * cartMassMultiplier * 20.0;
+  }
+
+  // 最下点速度の理論値 (m/s)
+  function getTheoreticalSpeed() {
+    return Math.sqrt(2 * 9.8 * (startHeight / 100.0));
+  }
+
+  function updateStatus() {
+    if (!isRunning && woodBlockX === 0) {
+      setStatus(`【発進前】高さ ${startHeight}cm / 質量 ${cartMassMultiplier}倍。斜面を下るにつれて位置エネルギーが運動エネルギーへとすべて変換されます。「手をはなす」ボタンを押してください。`);
+      return;
+    }
+
+    if (isRunning && cartProgress < 1.0) {
+      setStatus(`【滑降中！】位置エネルギーが減少し、その分だけ運動エネルギー（速さ）が増加中！力学的エネルギーの総和は常に一定に保たれています。`);
+      return;
+    }
+
+    if (woodSlideVelocity > 0 || (woodBlockX > 0 && !isRunning)) {
+      setStatus(`【衝突・仕事の測定完了！】最下点速度: ${bottomSpeed.toFixed(2)} m/s ➔ 木片移動距離: 【 ${woodBlockX.toFixed(1)} cm 】！★高さが2倍になれば距離も2倍、質量が2倍になれば距離も2倍に比例します！`);
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  function render() {
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    const slopeStartX = 40, slopeStartY = h - 50 - height*2;
-    const slopeEndX = 250, slopeEndY = h - 50;
+    if (isRunning) {
+      if (cartProgress < 1.0) {
+        const accel = 0.012 * Math.sqrt(startHeight / 20);
+        cartProgress = Math.min(1.0, cartProgress + accel * (1 + cartProgress * 1.5));
+        cartSpeed = getTheoreticalSpeed() * Math.sqrt(cartProgress);
 
+        if (cartProgress >= 1.0) {
+          bottomSpeed = getTheoreticalSpeed();
+          cartSpeed = bottomSpeed;
+          woodSlideVelocity = 0.45 * Math.sqrt(getTheoreticalDistance());
+        }
+      } else {
+        if (woodSlideVelocity > 0) {
+          woodBlockX += woodSlideVelocity * 0.4;
+          woodSlideVelocity *= 0.94;
+          const targetDist = getTheoreticalDistance();
+
+          if (woodBlockX >= targetDist || woodSlideVelocity < 0.02) {
+            woodBlockX = targetDist;
+            woodSlideVelocity = 0.0;
+            isRunning = false;
+            renderControls();
+            updateStatus();
+          }
+        }
+      }
+    }
+
+    const rightPanelW = 250;
+    const mainTrackW = w - rightPanelW - 35;
+
+    // 1. 左側メイン：実験コース
+    drawMotionTrack(15, 15, mainTrackW, h - 30);
+
+    // 2. 右側パネル：2大比例グラフ
+    drawPhysicsGraphs(w - rightPanelW - 15, 15, rightPanelW, h - 30);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  function drawMotionTrack(bx, by, bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🏎️ 斜面台車の滑走と木片衝突実験", bx + 12, by + 20);
+
+    drawEnergyConservationBar(bx + 12, by + 30, bw - 24, 24);
+
+    const groundY = by + bh - 55;
+    const slopeStartX = bx + 35;
+    const slopeEndX = bx + bw * 0.42;
+    const slopeStartY = groundY - (startHeight * 3.0);
+
+    // レール
     ctx.strokeStyle = "#94a3b8";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(slopeStartX, slopeStartY);
-    ctx.lineTo(slopeEndX, slopeEndY);
-    ctx.lineTo(w - 30, slopeEndY);
+    ctx.lineTo(slopeEndX, groundY);
+    ctx.lineTo(bx + bw - 15, groundY);
     ctx.stroke();
 
-    if (isRunning) {
-      cartX += 6;
-      if (cartX > w - 80) isRunning = false;
-    }
-    const curY = cartX < slopeEndX ? slopeStartY + (cartX - slopeStartX)*((slopeEndY - slopeStartY)/(slopeEndX - slopeStartX)) : slopeEndY;
+    // 支柱
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(slopeStartX, slopeStartY);
+    ctx.lineTo(slopeStartX, groundY);
+    ctx.stroke();
 
-    ctx.fillStyle = "#ef4444";
-    ctx.fillRect(cartX - 15, curY - 20, 30, 20);
+    // 高さの矢印
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 1.5;
+    drawArrow(slopeStartX - 10, groundY, slopeStartX - 10, slopeStartY, 4);
+    drawArrow(slopeStartX - 10, slopeStartY, slopeStartX - 10, groundY, 4);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`${startHeight}cm`, slopeStartX - 14, (slopeStartY + groundY) / 2 + 3);
+
+    // 光電管（スピード測定器）
+    const sensorX = slopeEndX + 12;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(sensorX - 6, groundY - 28, 12, 28);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(sensorX - 6, groundY - 28, 12, 28);
+
+    ctx.strokeStyle = isRunning && cartProgress >= 0.95 ? "#ef4444" : "rgba(56, 189, 248, 0.4)";
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(sensorX, groundY - 24);
+    ctx.lineTo(sensorX, groundY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 速度デジタル表示板
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(sensorX - 22, groundY - 58, 44, 20);
+    ctx.strokeStyle = "#334155";
+    ctx.strokeRect(sensorX - 22, groundY - 58, 44, 20);
+    ctx.fillStyle = bottomSpeed > 0 ? "#4ade80" : "#64748b";
+    ctx.font = "bold 10px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(bottomSpeed > 0 ? `${bottomSpeed.toFixed(2)}m/s` : "0.00m/s", sensorX, groundY - 44);
+
+    // 台車の位置計算と描画（レール接地面のオフセットを完全調整）
+    let cartX, cartY, cartAngle;
+    if (cartProgress < 1.0) {
+      cartX = slopeStartX + (slopeEndX - slopeStartX) * cartProgress;
+      cartY = slopeStartY + (groundY - slopeStartY) * cartProgress;
+      cartAngle = Math.atan2(groundY - slopeStartY, slopeEndX - slopeStartX);
+    } else {
+      const pushPixels = (woodBlockX / 40.0) * (bw * 0.42);
+      cartX = slopeEndX + 45 + pushPixels;
+      cartY = groundY;
+      cartAngle = 0;
+    }
+
+    drawCart(cartX, cartY, cartAngle, cartMassMultiplier);
+
+    // 木片
+    const initialWoodX = slopeEndX + 50;
+    const woodPx = (woodBlockX / 40.0) * (bw * 0.42);
+    const currentWoodX = initialWoodX + woodPx;
+    const woodW = 26, woodH = 20;
+
+    ctx.fillStyle = "#b45309";
+    ctx.fillRect(currentWoodX, groundY - woodH, woodW, woodH);
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(currentWoodX, groundY - woodH, woodW, woodH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("木片", currentWoodX + woodW / 2, groundY - 7);
+
+    // ものさし
+    const rulerY = groundY + 8;
+    const rulerW = bw * 0.48;
+    ctx.fillStyle = "#fef08a";
+    ctx.fillRect(initialWoodX, rulerY, rulerW, 12);
+    ctx.strokeStyle = "#ca8a04";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(initialWoodX, rulerY, rulerW, 12);
+
+    ctx.fillStyle = "#78350f";
+    ctx.font = "8px monospace";
+    for (let cm = 0; cm <= 40; cm += 5) {
+      const rx = initialWoodX + (cm / 40.0) * (bw * 0.42);
+      if (rx <= initialWoodX + rulerW) {
+        ctx.beginPath();
+        ctx.moveTo(rx, rulerY);
+        ctx.lineTo(rx, rulerY + (cm % 10 === 0 ? 6 : 3));
+        ctx.stroke();
+        if (cm % 10 === 0) {
+          ctx.textAlign = "center";
+          ctx.fillText(`${cm}`, rx, rulerY + 11);
+        }
+      }
+    }
+
+    // 移動距離の寸法線
+    if (woodBlockX > 0) {
+      const measureY = groundY - woodH - 18;
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(initialWoodX, measureY);
+      ctx.lineTo(currentWoodX, measureY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(initialWoodX, measureY - 3); ctx.lineTo(initialWoodX, measureY + 3);
+      ctx.moveTo(currentWoodX, measureY - 3); ctx.lineTo(currentWoodX, measureY + 3);
+      ctx.stroke();
+
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`移動距離: ${woodBlockX.toFixed(1)} cm`, (initialWoodX + currentWoodX) / 2, measureY - 5);
+    }
+  }
+
+  // 台車の描画（車輪がレールにぴったり乗るように接地Y座標を補正）
+  function drawCart(x, y, angle, massMult) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    const cW = 38, cH = 18;
+    const wheelR = 5;
+
+    // レール表面（y=0）の上に車輪の最下点がぴったり来るよう、中心を -wheelR に持ち上げる
+    ctx.translate(0, -wheelR);
+
+    // 車体
+    ctx.fillStyle = "#0284c7";
+    ctx.fillRect(-cW, -cH, cW, cH);
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(-cW, -cH, cW, cH);
+
+    // おもり
+    if (massMult === 2) {
+      ctx.fillStyle = "#ea580c";
+      ctx.fillRect(-cW + 4, -cH - 12, cW - 8, 12);
+      ctx.strokeStyle = "#f97316";
+      ctx.strokeRect(-cW + 4, -cH - 12, cW - 8, 12);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 8px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("おもり", -cW / 2, -cH - 3);
+    }
+
+    // 車輪（レール表面 y=0 に接する）
+    ctx.fillStyle = "#1e293b";
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    [-cW + 9, -9].forEach(wx => {
+      ctx.beginPath();
+      ctx.arc(wx, 0, wheelR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    ctx.restore();
+  }
+
+  function drawEnergyConservationBar(x, y, w, h) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, y, w, h);
+
+    const uRatio = cartProgress < 1.0 ? (1.0 - cartProgress) : 0.0;
+    const kRatio = 1.0 - uRatio;
+
+    const barW = w - 145;
+    const barX = x + 135;
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillRect(barX, y + 3, barW * uRatio, h - 6);
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.fillRect(barX + barW * uRatio, y + 3, barW * kRatio, h - 6);
+
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#facc15";
+    ctx.fillText("力学的エネルギー保存:", x + 8, y + 16);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`位置:${(uRatio * 100).toFixed(0)}%`, barX + 6, y + 16);
+
+    ctx.textAlign = "right";
+    ctx.fillText(`運動:${(kRatio * 100).toFixed(0)}%`, barX + barW - 6, y + 16);
+  }
+
+  function drawPhysicsGraphs(gx, gy, gw, gh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(gx, gy, gw, gh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📊 2大比例関係グラフ", gx + 10, gy + 16);
+
+    const graphAreaH = gh - 35;
+    const halfH = graphAreaH / 2;
+
+    // 上段：高さ vs 移動距離
+    drawGraph1(gx + 32, gy + 38, gw - 46, halfH - 32);
+
+    // 下段：速さ vs 移動距離
+    drawGraph2(gx + 32, gy + halfH + 28, gw - 46, halfH - 36);
+  }
+
+  // グラフ1：高さ vs 移動距離（プロット点を線上に吸着）
+  function drawGraph1(x, y, w, h) {
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【比例】高さ vs 木片移動距離", x, y - 6);
+
+    // 理論直線（原点 (x, y+h) から (x+w, y) へ）
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x + w, y);
+    ctx.stroke();
+
+    // プロット点：直線上の正規化座標 (ratio = h / 40.0)
+    const ratio = startHeight / 40.0;
+    const px = x + ratio * w;
+    const py = y + h - ratio * h; // 直線にぴったり一致
+
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("高さ(cm)", x + w / 2, y + h + 10);
+  }
+
+  // グラフ2：速さ vs 移動距離（プロット点を放物線上に吸着）
+  function drawGraph2(x, y, w, h) {
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【2乗比例】速さ vs 木片移動距離", x, y - 6);
+
+    // 2乗放物線：原点 (x, y+h) から (x+w, y) へ
+    ctx.strokeStyle = "#f97316";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i <= 30; i++) {
+      const r = i / 30.0;
+      const gx = x + r * w;
+      const gy = y + h - (r * r) * h;
+      if (i === 0) ctx.moveTo(gx, gy);
+      else ctx.lineTo(gx, gy);
+    }
+    ctx.stroke();
+
+    // プロット点：放物線上の正規化座標 (vMax = sqrt(40cm) = 2.8m/s)
+    const curSpeed = getTheoreticalSpeed();
+    const maxSpeed = Math.sqrt(2 * 9.8 * 0.40); // 40cmでの最大速度
+    const rSpeed = Math.min(1.0, curSpeed / maxSpeed);
+
+    const px = x + rSpeed * w;
+    const py = y + h - (rSpeed * rSpeed) * h; // 放物線にぴったり一致
+
+    ctx.fillStyle = "#facc15";
+    ctx.beginPath();
+    ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("速さ(m/s)", x + w / 2, y + h + 10);
+  }
+
+  function drawArrow(x1, y1, x2, y2, size) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【満ち欠け幾何学＆グリッドUI完全修正版】月の満ち欠け (中3・地球)
+// ===================================================================
+function initC3Moon(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // --- 実験パラメータ ---
+  let moonAngle = 90;           // 月の公転角度 (度: 0:新月, 90:上弦, 180:満月, 270:下弦)
+  let observerTime = 18;        // 観測者の時刻 (12:昼, 18:夕方, 0:真夜中, 6:明け方)
+  let isAutoOrbit = false;      // 自動公転
+  let eclipseMode = 'none';     // 'none', 'solar', 'lunar'
+  let animId;
+  let tick = 0;
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>1. 代表的な月の形（月相）へジャンプ:</label>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap:6px;">
+          <button class="btn-action ${Math.abs(moonAngle-0)<5?'':'secondary'}" id="pNew" style="padding:6px; font-size:11px;">新月 (0°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-45)<5?'':'secondary'}" id="pCres" style="padding:6px; font-size:11px;">三日月 (45°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-90)<5?'':'secondary'}" id="pFirst" style="${Math.abs(moonAngle-90)<5?'background:#0d9488; border-color:#0d9488;':''} padding:6px; font-size:11px;">上弦の月 (90°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-135)<5?'':'secondary'}" id="pGibbous" style="padding:6px; font-size:11px;">上弦〜満月 (135°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-180)<5?'':'secondary'}" id="pFull" style="${Math.abs(moonAngle-180)<5?'background:#eab308; border-color:#eab308; color:#000;':''} padding:6px; font-size:11px;">満月 (180°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-270)<5?'':'secondary'}" id="pThird" style="${Math.abs(moonAngle-270)<5?'background:#0d9488; border-color:#0d9488;':''} padding:6px; font-size:11px;">下弦の月 (270°)</button>
+          <button class="btn-action ${Math.abs(moonAngle-315)<5?'':'secondary'}" id="pLate" style="padding:6px; font-size:11px;">有明月 (315°)</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>2. 月の公転位置: <span id="mDegVal" class="ctrl-val">${Math.round(moonAngle)}°</span></label>
+        <input type="range" id="mRange" min="0" max="360" value="${Math.round(moonAngle)}">
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. 地上の観測時刻（地球の自転）:</label>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px;">
+          <button class="btn-action ${observerTime===12?'':'secondary'}" id="t12" style="padding:6px 2px; font-size:11px;">昼(12時)</button>
+          <button class="btn-action ${observerTime===18?'':'secondary'}" id="t18" style="${observerTime===18?'background:#ea580c; border-color:#ea580c;':''} padding:6px 2px; font-size:11px;">夕方(18時)</button>
+          <button class="btn-action ${observerTime===0?'':'secondary'}" id="t0" style="${observerTime===0?'background:#1e1b4b; border-color:#818cf8;':''} padding:6px 2px; font-size:11px;">夜中(0時)</button>
+          <button class="btn-action ${observerTime===6?'':'secondary'}" id="t6" style="${observerTime===6?'background:#0284c7; border-color:#0284c7;':''} padding:6px 2px; font-size:11px;">明方(6時)</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px;">
+        <button class="btn-action ${isAutoOrbit?'secondary':''}" id="bAutoOrbit" style="flex:1.2; ${!isAutoOrbit?'background:#10b981; border-color:#10b981;':''}">
+          ${isAutoOrbit ? '公転停止 ⏸️' : '公転アニメーション再生 ▶️'}
+        </button>
+        <button class="btn-action ${eclipseMode==='solar'?'':'secondary'}" id="bSolar" style="flex:1; ${eclipseMode==='solar'?'background:#ef4444; border-color:#ef4444;':''}">
+          日食モード 🌑
+        </button>
+        <button class="btn-action ${eclipseMode==='lunar'?'':'secondary'}" id="bLunar" style="flex:1; ${eclipseMode==='lunar'?'background:#b91c1c; border-color:#b91c1c;':''}">
+          月食モード 🌕
+        </button>
+        <button class="btn-action secondary" id="bResetMoon" style="flex:1;">
+          リセット 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('mRange').oninput = (e) => {
+      moonAngle = parseInt(e.target.value);
+      document.getElementById('mDegVal').textContent = `${Math.round(moonAngle)}°`;
+      eclipseMode = 'none';
+      updateStatus();
+    };
+
+    document.getElementById('pNew').onclick = () => setPhase(0);
+    document.getElementById('pCres').onclick = () => setPhase(45);
+    document.getElementById('pFirst').onclick = () => setPhase(90);
+    document.getElementById('pGibbous').onclick = () => setPhase(135);
+    document.getElementById('pFull').onclick = () => setPhase(180);
+    document.getElementById('pThird').onclick = () => setPhase(270);
+    document.getElementById('pLate').onclick = () => setPhase(315);
+
+    document.getElementById('t12').onclick = () => { observerTime = 12; renderControls(); updateStatus(); };
+    document.getElementById('t18').onclick = () => { observerTime = 18; renderControls(); updateStatus(); };
+    document.getElementById('t0').onclick = () => { observerTime = 0; renderControls(); updateStatus(); };
+    document.getElementById('t6').onclick = () => { observerTime = 6; renderControls(); updateStatus(); };
+
+    document.getElementById('bAutoOrbit').onclick = () => {
+      isAutoOrbit = !isAutoOrbit;
+      renderControls();
+    };
+
+    document.getElementById('bSolar').onclick = () => {
+      moonAngle = 0;
+      observerTime = 12;
+      eclipseMode = 'solar';
+      isAutoOrbit = false;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bLunar').onclick = () => {
+      moonAngle = 180;
+      observerTime = 0;
+      eclipseMode = 'lunar';
+      isAutoOrbit = false;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bResetMoon').onclick = resetLab;
+  }
+
+  function setPhase(deg) {
+    moonAngle = deg;
+    eclipseMode = 'none';
+    const rng = document.getElementById('mRange');
+    const val = document.getElementById('mDegVal');
+    if (rng) rng.value = Math.round(deg);
+    if (val) val.textContent = `${Math.round(deg)}°`;
+    renderControls();
+    updateStatus();
+  }
+
+  function resetLab() {
+    moonAngle = 90;
+    observerTime = 18;
+    isAutoOrbit = false;
+    eclipseMode = 'none';
+    renderControls();
+    updateStatus();
+  }
+
+  // 月情報と方角計算
+  function getMoonInfo() {
+    const deg = (moonAngle % 360 + 360) % 360;
+    let name = "月";
+    let desc = "";
+
+    if (deg >= 350 || deg <= 10) {
+      name = "新月（朔・さく）";
+      desc = "太陽と同じ方向にあり、地球に影の面を向けているため肉眼では見えません。";
+    } else if (deg > 10 && deg < 80) {
+      name = "三日月（みかづき）";
+      desc = "西の空に夕方、右側が細く光る弓状の月が見えます。すぐに西へ沈みます。";
+    } else if (deg >= 80 && deg <= 100) {
+      name = "上弦の月（半月）";
+      desc = "夕方に南中し、右半分が輝く半月です。夜中の12時に西の地平線へ沈みます。";
+    } else if (deg > 100 && deg < 170) {
+      name = "上弦〜満月（太った月）";
+      desc = "夕方南東の空から昇り、夜遅くまで空を明るく照らします。";
+    } else if (deg >= 170 && deg <= 190) {
+      name = "満月（望・ぼう）";
+      desc = "太陽の真反対に位置し、全面が太陽光を反射して輝きます。夕方東から昇り、夜中南中し、明け方西に沈みます。";
+    } else if (deg > 190 && deg < 260) {
+      name = "満月〜下弦";
+      desc = "夜遅く東の空から昇り、午前中の青空にも白く残ります。";
+    } else if (deg >= 260 && deg <= 280) {
+      name = "下弦の月（半月）";
+      desc = "夜中の12時に東から昇り、明け方に南中します。左半分が光る半月です。";
+    } else {
+      name = "有明月（逆三日月）";
+      desc = "明け方の東の空に、左側が細く光って昇る月です。まもなく夜明けを迎えます。";
+    }
+
+    const obsAngle = ((observerTime - 12) / 24) * 360;
+    let relAngle = (deg - obsAngle);
+    while (relAngle > 180) relAngle -= 360;
+    while (relAngle < -180) relAngle += 360;
+
+    let visibility = "見えない（地平線の下）";
+    if (relAngle >= -90 && relAngle <= 90) {
+      if (relAngle >= -90 && relAngle < -25) visibility = "東の空（昇ってきた）";
+      else if (relAngle >= -25 && relAngle <= 25) visibility = "南の空（南中！）";
+      else visibility = "西の空（沈みかけている）";
+    }
+
+    return { name, desc, visibility, deg, relAngle };
+  }
+
+  function updateStatus() {
+    const info = getMoonInfo();
+    const timeLabel = { 12: "昼(12時)", 18: "夕方(18時)", 0: "真夜中(0時)", 6: "明け方(6時)" }[observerTime];
+
+    if (eclipseMode === 'solar') {
+      setStatus("【日食発生！】新月のとき、太陽・月・地球が一直線に並び、月が太陽を隠します。地球上の狭い地域で太陽が欠けて見えます！");
+      return;
+    }
+    if (eclipseMode === 'lunar') {
+      setStatus("【月食発生！】満月のとき、太陽・地球・月が一直線に並び、地球の影の中に月がすっぽり入ります。月が赤黒く（赤銅色に）光ります！");
+      return;
+    }
+
+    setStatus(`【${info.name}】現在時刻『${timeLabel}』➔ 観測結果：【 ${info.visibility} 】！${info.desc}`);
+  }
+
+  renderControls();
+  updateStatus();
+
+  function render() {
+    tick += 0.03;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    if (isAutoOrbit) {
+      moonAngle = (moonAngle + 0.35) % 360;
+      const rng = document.getElementById('mRange');
+      const val = document.getElementById('mDegVal');
+      if (rng) rng.value = Math.round(moonAngle);
+      if (val) val.textContent = `${Math.round(moonAngle)}°`;
+      if (Math.random() < 0.05) updateStatus();
+    }
+
+    const halfW = (w - 30) / 2;
+
+    // 1. 左画面：宇宙からの俯瞰図
+    drawCosmicView(15, 15, halfW, h - 30);
+
+    // 2. 右画面：地球から見上げた空の実景ビュー
+    drawEarthSkyView(15 + halfW + 10, 15, halfW, h - 30);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  function drawCosmicView(bx, by, bw, bh) {
+    ctx.fillStyle = "#090d16";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🔭 宇宙から見下ろした図（常に右半分が光る）", bx + 12, by + 22);
+
+    const cx = bx + bw * 0.45;
+    const cy = by + bh / 2 + 10;
+    const orbitR = Math.min(bw * 0.35, bh * 0.35);
+
+    // 太陽光線（右側から照射）
+    const sunColor = eclipseMode === 'solar' ? "rgba(239, 68, 68, 0.4)" : "rgba(250, 204, 21, 0.35)";
+    ctx.strokeStyle = sunColor;
+    ctx.lineWidth = 1.5;
+    for (let i = -3; i <= 3; i++) {
+      const ly = cy + i * 28;
+      ctx.beginPath();
+      ctx.moveTo(bx + bw - 10, ly);
+      ctx.lineTo(bx + bw - 60, ly);
+      ctx.stroke();
+      drawArrow(bx + bw - 10, ly, bx + bw - 55, ly, 4);
+    }
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("太陽光 ⬅", bx + bw - 10, cy - 95);
+
+    // 公転軌道
+    ctx.strokeStyle = "rgba(100, 116, 139, 0.45)";
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, orbitR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawOrbitArrow(cx, cy, orbitR, Math.PI * 0.25);
+    drawOrbitArrow(cx, cy, orbitR, Math.PI * 1.25);
+
+    // 地球
+    const earthR = 24;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, earthR, 0, Math.PI * 2);
+    ctx.fillStyle = "#0284c7";
+    ctx.fill();
+    ctx.clip();
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+    ctx.fillRect(cx - earthR, cy - earthR, earthR, earthR * 2);
+    ctx.restore();
+
+    ctx.strokeStyle = "#38bdf8";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, earthR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("北極", cx, cy + 3);
+
+    drawObserverOnEarth(cx, cy, earthR);
+
+    // 月の公転位置
+    const rad = (moonAngle * Math.PI) / 180;
+    const mx = cx + Math.cos(-rad) * orbitR;
+    const my = cy + Math.sin(-rad) * orbitR;
+    const moonR = 12;
+
+    if (eclipseMode === 'lunar') {
+      ctx.fillStyle = "rgba(220, 38, 38, 0.25)";
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - earthR);
+      ctx.lineTo(cx - orbitR - 30, cy - earthR * 1.5);
+      ctx.lineTo(cx - orbitR - 30, cy + earthR * 1.5);
+      ctx.lineTo(cx, cy + earthR);
+      ctx.fill();
+    }
+
+    drawCosmicMoonBall(mx, my, moonR);
+
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(mx, my);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawCosmicMoonBall(x, y, r) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#1e293b";
+    ctx.fill();
+    ctx.clip();
+
+    ctx.fillStyle = eclipseMode === 'lunar' ? "#b91c1c" : "#fef08a";
+    ctx.fillRect(x, y - r, r, r * 2);
+    ctx.restore();
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function drawObserverOnEarth(cx, cy, r) {
+    const timeAngle = ((observerTime - 12) / 24) * Math.PI * 2;
+    const ox = cx + Math.cos(-timeAngle) * (r + 4);
+    const oy = cy + Math.sin(-timeAngle) * (r + 4);
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.beginPath();
+    ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.rotate(-timeAngle + Math.PI / 2);
+    ctx.strokeStyle = "rgba(74, 222, 128, 0.7)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-18, 0); ctx.lineTo(18, 0);
+    ctx.stroke();
+
+    ctx.fillStyle = "#4ade80";
+    ctx.font = "bold 8px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("南", 0, -8);
+    ctx.fillText("東", -18, 10);
+    ctx.fillText("西", 18, 10);
+    ctx.restore();
+  }
+
+  function drawOrbitArrow(cx, cy, r, angle) {
+    const ax = cx + Math.cos(angle) * r;
+    const ay = cy + Math.sin(angle) * r;
+    const tanAngle = angle + Math.PI / 2;
+    ctx.fillStyle = "#94a3b8";
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - 6 * Math.cos(tanAngle - 0.4), ay - 6 * Math.sin(tanAngle - 0.4));
+    ctx.lineTo(ax - 6 * Math.cos(tanAngle + 0.4), ay - 6 * Math.sin(tanAngle + 0.4));
+    ctx.fill();
+  }
+
+  function drawEarthSkyView(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    const info = getMoonInfo();
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("👁️ 地球から見上げた実際の月", bx + 12, by + 22);
+
+    const mcx = bx + bw / 2;
+    const mcy = by + 90;
+    const mr = 44;
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+    for (let i = 0; i < 15; i++) {
+      const sx = bx + 15 + ((i * 37) % (bw - 30));
+      const sy = by + 35 + ((i * 23) % 110);
+      ctx.fillRect(sx, sy, 1.2, 1.2);
+    }
+
+    // 満ち欠けの数学的描画
+    drawPhaseMoon(mcx, mcy, mr, info.deg);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(info.name, mcx, by + 155);
+
+    drawObserverNavBoard(bx + 10, by + 168, bw - 20, bh - 178, info);
+  }
+
+  // 地球から見た満ち欠け描画（凸月・三日月の数学的完全修正版）
+  function drawPhaseMoon(cx, cy, r, deg) {
+    ctx.save();
+
+    // 影のベース（全体）
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = "#0f172a";
+    ctx.fill();
+    ctx.strokeStyle = "#475569";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const normDeg = (deg % 360 + 360) % 360;
+    const brightColor = eclipseMode === 'lunar' ? "#b91c1c" : (eclipseMode === 'solar' ? "#0f172a" : "#fef08a");
+    ctx.fillStyle = brightColor;
+
+    // k: -1.0(新月) 〜 0.0(半月) 〜 1.0(満月)
+    const k = -Math.cos((normDeg * Math.PI) / 180);
+
+    if (normDeg > 0 && normDeg < 180) {
+      // 0〜180°：右側が光る（三日月・上弦・上弦〜満月）
+      if (k >= 0) {
+        // 凸月（90°〜180°: 半分以上光る）
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false); // 右半円
+        ctx.ellipse(cx, cy, k * r, r, 0, Math.PI / 2, -Math.PI / 2, true); // 左へふくらむ
+        ctx.fill();
+      } else {
+        // 三日月（0°〜90°: 半分未満光る）
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false); // 右半円
+        ctx.ellipse(cx, cy, Math.abs(k) * r, r, 0, Math.PI / 2, -Math.PI / 2, false); // 右へ凹む
+        ctx.fill();
+      }
+    } else if (normDeg >= 180 && normDeg < 360) {
+      // 180〜360°：左側が光る（満月〜下弦・下弦・有明月）
+      if (k >= 0) {
+        // 凸月（180°〜270°: 半分以上光る）
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false); // 左半円
+        ctx.ellipse(cx, cy, k * r, r, 0, -Math.PI / 2, Math.PI / 2, true); // 右へふくらむ
+        ctx.fill();
+      } else {
+        // 有明月（270°〜360°: 半分未満光る）
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false); // 左半円
+        ctx.ellipse(cx, cy, Math.abs(k) * r, r, 0, -Math.PI / 2, Math.PI / 2, false); // 左へ凹む
+        ctx.fill();
+      }
+    }
+
+    if (eclipseMode === 'lunar') {
+      ctx.fillStyle = "rgba(185, 28, 28, 0.6)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawObserverNavBoard(x, y, w, h, info) {
+    ctx.fillStyle = "#090d16";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, y, w, h);
+
+    const timeLabel = { 12: "昼(12時)", 18: "夕方(18時)", 0: "真夜中(0時)", 6: "明け方(6時)" }[observerTime];
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`📍 観測時刻：${timeLabel} の空`, x + 8, y + 15);
+
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillStyle = info.visibility.includes("南中") ? "#facc15" : (info.visibility.includes("空") ? "#4ade80" : "#64748b");
+    ctx.fillText(`見える方角 ➔ 【 ${info.visibility} 】`, x + 8, y + 33);
+
+    const riseHour = (Math.round((info.deg / 15) + 6) % 24);
+    const southHour = (Math.round((info.deg / 15) + 12) % 24);
+    const setHour = (Math.round((info.deg / 15) + 18) % 24);
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(`・月の出（東）: 約 ${riseHour} 時ごろ`, x + 8, y + 50);
+    ctx.fillText(`・南中（南） : 約 ${southHour} 時ごろ（最高高度）`, x + 8, y + 64);
+    ctx.fillText(`・月の入り（西）: 約 ${setHour} 時ごろ`, x + 8, y + 78);
+  }
+
+  function drawArrow(x1, y1, x2, y2, size) {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6));
+    ctx.stroke();
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【密集防止＆適正ピラミッド調整版】生態系と食物連鎖 (中3・環境)
+// ===================================================================
+function initC3Foodweb(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // --- ゲーム＆生態系状態 ---
+  let isRunning = true;
+  let clickTool = 'rabbit';
+  let ecoScore = 0;
+  let ecoStatusTitle = "調和のとれた草原";
+  let tick = 0;
+  let animId;
+
+  const plants = [];
+  const herbivores = [];
+  const carnivores = [];
+  const decomposers = [];
+  const deadRemains = [];
+  const co2Particles = [];
+
+  const history = [];
+  const maxHistory = 140;
+
+  function getFieldBounds(bw, bh) {
+    return {
+      fx: 25,
+      fy: 48,
+      fw: bw - 50,
+      fh: bh - 120
+    };
+  }
+
+  function spawnPlant(count = 1, atPos = null) {
+    const { fx, fy, fw, fh } = getFieldBounds(canvas.width - 260, canvas.height);
+    for (let i = 0; i < count; i++) {
+      const px = atPos ? atPos.x + (Math.random() - 0.5) * 20 : fx + 15 + Math.random() * (fw - 30);
+      const py = atPos ? atPos.y + (Math.random() - 0.5) * 20 : fy + 15 + Math.random() * (fh - 30);
+      plants.push({
+        x: Math.max(fx + 10, Math.min(fx + fw - 10, px)),
+        y: Math.max(fy + 10, Math.min(fy + fh - 10, py)),
+        size: 3.5
+      });
+    }
+  }
+
+  function spawnRabbit(count = 1, atPos = null) {
+    const { fx, fy, fw, fh } = getFieldBounds(canvas.width - 260, canvas.height);
+    for (let i = 0; i < count; i++) {
+      const rx = atPos ? atPos.x : fx + 25 + Math.random() * (fw - 50);
+      const ry = atPos ? atPos.y : fy + 25 + Math.random() * (fh - 50);
+      herbivores.push({
+        x: Math.max(fx + 10, Math.min(fx + fw - 10, rx)),
+        y: Math.max(fy + 10, Math.min(fy + fh - 10, ry)),
+        vx: (Math.random() - 0.5) * 0.7,
+        vy: (Math.random() - 0.5) * 0.7,
+        energy: 110,
+        panic: 0,
+        age: 0
+      });
+    }
+  }
+
+  function spawnFox(count = 1, atPos = null) {
+    const { fx, fy, fw, fh } = getFieldBounds(canvas.width - 260, canvas.height);
+    for (let i = 0; i < count; i++) {
+      // 画面全体に散らしてスポーン（左上集中を回避）
+      const fxPos = atPos ? atPos.x : fx + 40 + Math.random() * (fw - 80);
+      const fyPos = atPos ? atPos.y : fy + 40 + Math.random() * (fh - 80);
+      carnivores.push({
+        x: Math.max(fx + 10, Math.min(fx + fw - 10, fxPos)),
+        y: Math.max(fy + 10, Math.min(fy + fh - 10, fyPos)),
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        energy: 180,
+        hunger: 0
+      });
+    }
+  }
+
+  function resetEcosystem() {
+    plants.length = 0;
+    herbivores.length = 0;
+    carnivores.length = 0;
+    deadRemains.length = 0;
+    co2Particles.length = 0;
+    history.length = 0;
+    ecoScore = 0;
+
+    spawnPlant(45);
+    spawnRabbit(16);
+    spawnFox(3); // 初期キツネは3匹でスタート
+
+    const { fx, fy, fw, fh } = getFieldBounds(canvas.width - 260, canvas.height);
+    decomposers.length = 0;
+    for (let i = 0; i < 8; i++) {
+      decomposers.push({
+        x: fx + 20 + (i * (fw - 40) / 7),
+        y: fy + fh + 18,
+        pulse: Math.random() * Math.PI
+      });
+    }
+  }
+  resetEcosystem();
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>🐾 生き物を直接投入（ボタンを押すと即出現！草原クリックでも配置可能）：</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn-action" id="tPlant" style="background:#16a34a; border-color:#16a34a; flex:1; font-size:12px; font-weight:bold; padding:8px 4px;">
+            🌱 草を植える (+5株)
+          </button>
+          <button class="btn-action" id="tRabbit" style="background:#0284c7; border-color:#0284c7; flex:1; font-size:12px; font-weight:bold; padding:8px 4px;">
+            🐇 ウサギを放つ (+3匹)
+          </button>
+          <button class="btn-action" id="tFox" style="background:#ea580c; border-color:#ea580c; flex:1; font-size:12px; font-weight:bold; padding:8px 4px;">
+            🦊 キツネを放つ (+1匹)
+          </button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>⚡ 神の介入イベント（ハプニングを起こして自動調節を観察）：</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn-action" id="bHunt" style="flex:1; background:#ef4444; border-color:#ef4444; font-size:11px; padding:7px 3px;">🏹 草食乱獲 (激減)</button>
+          <button class="btn-action" id="bInvade" style="flex:1; background:#f59e0b; border-color:#f59e0b; font-size:11px; padding:7px 3px;">🐰 外来種大発生</button>
+          <button class="btn-action" id="bRain" style="flex:1; background:#0284c7; border-color:#0284c7; font-size:11px; padding:7px 3px;">🌧️ 恵みの雨 (植物増)</button>
+          <button class="btn-action" id="bBioAcc" style="flex:1; background:#7c3aed; border-color:#7c3aed; font-size:11px; padding:7px 3px;">☣️ 生物濃縮 (頂点激減)</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bPauseGame" style="flex:1; font-size:12px;">
+          ${isRunning ? 'シミュレーション一時停止 ⏸️' : '再開 ▶️'}
+        </button>
+        <button class="btn-action secondary" id="bResetEco" style="flex:1; font-size:12px;">
+          初期バランスに戻す 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('tPlant').onclick = () => {
+      clickTool = 'plant';
+      spawnPlant(5);
+      setStatus("【草を植えました】生産者が+5株増えました！草食動物のエサが豊かになります。");
+    };
+
+    document.getElementById('tRabbit').onclick = () => {
+      clickTool = 'rabbit';
+      spawnRabbit(3);
+      setStatus("【ウサギを放ちました】一次消費者が+3匹増えました！草を食べて繁殖を狙います。");
+    };
+
+    document.getElementById('tFox').onclick = () => {
+      clickTool = 'fox';
+      spawnFox(1);
+      setStatus("【キツネを放ちました】二次消費者が+1匹投入されました！縄張りを広げます。");
+    };
+
+    document.getElementById('bHunt').onclick = () => {
+      herbivores.splice(0, Math.floor(herbivores.length * 0.7));
+      setStatus("【草食動物の乱獲！】ウサギが激減！➔ 食べられる草が増加し、エサ不足になったキツネが減少を開始。自然の自動調節が始まります。");
+    };
+
+    document.getElementById('bInvade').onclick = () => {
+      spawnRabbit(18);
+      setStatus("【外来種の侵入！】ウサギが大量発生！➔ 草原が食い荒らされて砂漠化寸前になり、キツネが一時的に急増します。");
+    };
+
+    document.getElementById('bRain').onclick = () => {
+      spawnPlant(25);
+      setStatus("【恵みの雨】光合成が活発化し植物が急成長！草食・肉食すべての生物量が増加サイクルに入ります。");
+    };
+
+    document.getElementById('bBioAcc').onclick = () => {
+      carnivores.splice(0, Math.floor(carnivores.length * 0.75));
+      setStatus("【生物濃縮の警鐘！】食物連鎖の上位捕食者（キツネ）に毒素が高濃度に蓄積して倒れました！天敵がいなくなったウサギが増加します。", true);
+    };
+
+    document.getElementById('bPauseGame').onclick = () => {
+      isRunning = !isRunning;
+      renderControls();
+    };
+
+    document.getElementById('bResetEco').onclick = () => {
+      resetEcosystem();
+      renderControls();
+      setStatus("生態系を初期の理想バランスにリセットしました。ボタンを押して生き物を追加してみましょう！");
+    };
+  }
+
+  canvas.onmousedown = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+    const bounds = getFieldBounds(canvas.width - 260, canvas.height);
+
+    if (mx >= bounds.fx && mx <= bounds.fx + bounds.fw && my >= bounds.fy && my <= bounds.fy + bounds.fh) {
+      if (clickTool === 'plant') {
+        spawnPlant(2, { x: mx, y: my });
+      } else if (clickTool === 'rabbit') {
+        spawnRabbit(1, { x: mx, y: my });
+      } else if (clickTool === 'fox') {
+        spawnFox(1, { x: mx, y: my });
+      }
+    }
+  };
+
+  function updateStatus() {
+    setStatus("【自然の自動調節機能（動的平衡）】一時的に特定の生物が増減しても、食べる・食べられる関係を通じて長い時間をかけて元のピラミッド比率へと戻っていきます。");
+  }
+
+  renderControls();
+  updateStatus();
+
+  function loop() {
+    tick++;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    const rightPanelW = 255;
+    const mainFieldW = w - rightPanelW - 30;
+    const bounds = getFieldBounds(mainFieldW, h);
+
+    if (isRunning) {
+      const isHealthy = plants.length >= 20 && herbivores.length >= 8 && carnivores.length >= 1 && carnivores.length <= 5;
+      if (isHealthy) {
+        ecoScore += 1;
+        ecoStatusTitle = ecoScore > 1000 ? "🌟 マスター・エコロジスト (完全調和)" : (ecoScore > 300 ? "🌿 豊かな安定草原" : "調和のとれた草原");
+      } else {
+        ecoStatusTitle = carnivores.length > herbivores.length ? "⚠️ 捕食過多 (ピラミッド崩壊)" : (carnivores.length === 0 ? "⚠️ 肉食不在" : "自然の自律回復中…");
+      }
+
+      // --- 連鎖復活ロジック ---
+      // 草が豊富（25株以上）なのにウサギが少ない（6匹未満）➔ ウサギがやってくる！
+      if (plants.length >= 25 && herbivores.length < 6 && tick % 80 === 0) {
+        spawnRabbit(1);
+      }
+
+      // ウサギが十分多い（12匹以上）のにキツネが少ない（2匹未満）➔ キツネが1匹やってくる！
+      if (herbivores.length >= 12 && carnivores.length < 2 && tick % 150 === 0) {
+        spawnFox(1);
+      }
+
+      // 1. 植物の繁殖（最大80株）
+      if (tick % 40 === 0 && plants.length < 80) {
+        if (plants.length > 0 && Math.random() < 0.6) {
+          const parent = plants[Math.floor(Math.random() * plants.length)];
+          const nx = Math.max(bounds.fx + 10, Math.min(bounds.fx + bounds.fw - 10, parent.x + (Math.random() - 0.5) * 40));
+          const ny = Math.max(bounds.fy + 10, Math.min(bounds.fy + bounds.fh - 10, parent.y + (Math.random() - 0.5) * 40));
+          plants.push({ x: nx, y: ny, size: 3.5 });
+        } else {
+          plants.push({ x: bounds.fx + 10 + Math.random() * (bounds.fw - 20), y: bounds.fy + 10 + Math.random() * (bounds.fh - 20), size: 3.5 });
+        }
+      }
+
+      // 2. ウサギ（草食）AI
+      for (let i = herbivores.length - 1; i >= 0; i--) {
+        const r = herbivores[i];
+        r.age++;
+        r.energy -= 0.12;
+
+        // キツネ感知（逃走）
+        let threatFox = null;
+        let minFoxDist = 60;
+        carnivores.forEach(f => {
+          const d = Math.hypot(r.x - f.x, r.y - f.y);
+          if (d < minFoxDist) { minFoxDist = d; threatFox = f; }
+        });
+
+        if (threatFox) {
+          r.vx = (r.x - threatFox.x) * 0.035;
+          r.vy = (r.y - threatFox.y) * 0.035;
+          r.panic = 15;
+        } else {
+          if (r.panic > 0) r.panic--;
+          let nearestP = null;
+          let minPDist = 80;
+          plants.forEach(p => {
+            const d = Math.hypot(r.x - p.x, r.y - p.y);
+            if (d < minPDist) { minPDist = d; nearestP = p; }
+          });
+
+          if (nearestP) {
+            r.vx = (nearestP.x - r.x) * 0.015;
+            r.vy = (nearestP.y - r.y) * 0.015;
+          } else {
+            r.vx += (Math.random() - 0.5) * 0.1;
+            r.vy += (Math.random() - 0.5) * 0.1;
+          }
+        }
+
+        // ウサギ同士の反発（密集回避）
+        herbivores.forEach(otherR => {
+          if (r !== otherR) {
+            const d = Math.hypot(r.x - otherR.x, r.y - otherR.y);
+            if (d < 16 && d > 0) {
+              r.vx += (r.x - otherR.x) * 0.04;
+              r.vy += (r.y - otherR.y) * 0.04;
+            }
+          }
+        });
+
+        const speed = Math.hypot(r.vx, r.vy);
+        const maxSpd = r.panic > 0 ? 1.4 : 0.7;
+        if (speed > maxSpd) {
+          r.vx = (r.vx / speed) * maxSpd;
+          r.vy = (r.vy / speed) * maxSpd;
+        }
+
+        r.x += r.vx;
+        r.y += r.vy;
+
+        if (r.x < bounds.fx + 8) { r.x = bounds.fx + 8; r.vx *= -1; }
+        if (r.x > bounds.fx + bounds.fw - 8) { r.x = bounds.fx + bounds.fw - 8; r.vx *= -1; }
+        if (r.y < bounds.fy + 8) { r.y = bounds.fy + 8; r.vy *= -1; }
+        if (r.y > bounds.fy + bounds.fh - 8) { r.y = bounds.fy + bounds.fh - 8; r.vy *= -1; }
+
+        for (let pIdx = plants.length - 1; pIdx >= 0; pIdx--) {
+          const p = plants[pIdx];
+          if (Math.hypot(r.x - p.x, r.y - p.y) < 14) {
+            plants.splice(pIdx, 1);
+            r.energy += 35;
+            break;
+          }
+        }
+
+        // 繁殖（ウサギが多すぎないとき）
+        if (r.energy > 150 && herbivores.length < 35) {
+          r.energy = 80;
+          herbivores.push({
+            x: r.x + (Math.random() - 0.5) * 12,
+            y: r.y + (Math.random() - 0.5) * 12,
+            vx: (Math.random() - 0.5) * 0.7,
+            vy: (Math.random() - 0.5) * 0.7,
+            energy: 75, panic: 0, age: 0
+          });
+        }
+
+        if (r.energy <= 0 || r.age > 2500) {
+          deadRemains.push({ x: r.x, y: r.y, alpha: 1.0, type: "bone" });
+          herbivores.splice(i, 1);
+        }
+      }
+
+      // 3. キツネ（肉食）AI：縄張りと密集防止
+      for (let i = carnivores.length - 1; i >= 0; i--) {
+        const f = carnivores[i];
+        
+        // ウサギが極端に少ない時は飢えやすくなる（ピラミッド維持）
+        const hungerRate = herbivores.length < 5 ? 0.35 : 0.16;
+        f.energy -= hungerRate;
+
+        let targetH = null;
+        let minHDist = 120;
+        herbivores.forEach(hA => {
+          const d = Math.hypot(f.x - hA.x, f.y - hA.y);
+          if (d < minHDist) { minHDist = d; targetH = hA; }
+        });
+
+        if (targetH) {
+          f.vx = (targetH.x - f.x) * 0.018;
+          f.vy = (targetH.y - f.y) * 0.018;
+        } else {
+          f.vx += (Math.random() - 0.5) * 0.08;
+          f.vy += (Math.random() - 0.5) * 0.08;
+        }
+
+        // ★キツネ同士の縄張り反発（団子状態の完全解消）
+        carnivores.forEach(otherF => {
+          if (f !== otherF) {
+            const d = Math.hypot(f.x - otherF.x, f.y - otherF.y);
+            if (d < 35 && d > 0) { // 35px以内のキツネは強い反発で散らばる
+              f.vx += (f.x - otherF.x) * 0.06;
+              f.vy += (f.y - otherF.y) * 0.06;
+            }
+          }
+        });
+
+        const fSpeed = Math.hypot(f.vx, f.vy);
+        const maxFSpd = targetH ? 1.0 : 0.55;
+        if (fSpeed > maxFSpd) {
+          f.vx = (f.vx / fSpeed) * maxFSpd;
+          f.vy = (f.vy / fSpeed) * maxFSpd;
+        }
+
+        f.x += f.vx;
+        f.y += f.vy;
+
+        if (f.x < bounds.fx + 10) { f.x = bounds.fx + 10; f.vx *= -1; }
+        if (f.x > bounds.fx + bounds.fw - 10) { f.x = bounds.fx + bounds.fw - 10; f.vx *= -1; }
+        if (f.y < bounds.fy + 10) { f.y = bounds.fy + 10; f.vy *= -1; }
+        if (f.y > bounds.fy + bounds.fh - 10) { f.y = bounds.fy + bounds.fh - 10; f.vy *= -1; }
+
+        // 捕食
+        for (let hIdx = herbivores.length - 1; hIdx >= 0; hIdx--) {
+          const hA = herbivores[hIdx];
+          if (Math.hypot(f.x - hA.x, f.y - hA.y) < 16) {
+            deadRemains.push({ x: hA.x, y: hA.y, alpha: 1.0, type: "hunt" });
+            herbivores.splice(hIdx, 1);
+            f.energy += 80;
+            break;
+          }
+        }
+
+        // 繁殖（★最大でも5匹まで！それ以上は繁殖させずピラミッド崩壊を防ぐ）
+        if (f.energy > 300 && carnivores.length < 5 && herbivores.length >= 8) {
+          f.energy = 150;
+          carnivores.push({
+            x: f.x + (Math.random() - 0.5) * 20,
+            y: f.y + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 0.6,
+            vy: (Math.random() - 0.5) * 0.6,
+            energy: 140, hunger: 0
+          });
+        }
+
+        // 餓死
+        if (f.energy <= 0) {
+          deadRemains.push({ x: f.x, y: f.y, alpha: 1.0, type: "bone" });
+          carnivores.splice(i, 1);
+        }
+      }
+
+      // 4. 分解者の炭素循環
+      for (let i = deadRemains.length - 1; i >= 0; i--) {
+        const d = deadRemains[i];
+        d.y += 0.1;
+        d.alpha -= 0.005;
+
+        if (d.y > bounds.fy + bounds.fh) {
+          co2Particles.push({
+            x: d.x,
+            y: bounds.fy + bounds.fh + 15,
+            vy: -0.4 - Math.random() * 0.3,
+            alpha: 1.0
+          });
+          deadRemains.splice(i, 1);
+        } else if (d.alpha <= 0) {
+          deadRemains.splice(i, 1);
+        }
+      }
+
+      for (let i = co2Particles.length - 1; i >= 0; i--) {
+        const c = co2Particles[i];
+        c.y += c.vy;
+        c.alpha -= 0.01;
+        if (c.alpha <= 0) co2Particles.splice(i, 1);
+      }
+
+      if (tick % 10 === 0) {
+        history.push({
+          plant: plants.length,
+          herb: herbivores.length,
+          carn: carnivores.length
+        });
+        if (history.length > maxHistory) history.shift();
+      }
+    }
+
+    drawLivingField(15, 15, mainFieldW, h - 30, bounds);
+    drawEcoAnalyticsPanel(w - rightPanelW - 15, 15, rightPanelW, h - 30);
 
     animId = requestAnimationFrame(loop);
   }
   loop();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
-}
+  function drawLivingField(bx, by, bw, bh, bounds) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
 
-// 月の満ち欠け (中3・地球)
-function initC3Moon(canvas) {
-  const ctx = canvas.getContext('2d');
-  let angle = 0;
-  let animId;
-
-  const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group" style="grid-column: 1 / -1;">
-      <label>月の公転位置（地球の周りをドラッグ）: <span id="mVal" class="ctrl-val">${angle}°</span></label>
-      <input type="range" id="mRange" min="0" max="360" value="${angle}">
-    </div>
-  `;
-
-  document.getElementById('mRange').oninput = (e) => {
-    angle = parseInt(e.target.value);
-    document.getElementById('mVal').textContent = `${angle}°`;
-    updateMoonDesc();
-  };
-
-  function updateMoonDesc() {
-    if (angle < 20 || angle > 340) setStatus("【新月】太陽と同じ方向にあり、地球からは影の面を向けるため見えません。");
-    else if (angle >= 70 && angle <= 110) setStatus("【上弦の月】右半分が輝く半月が、夕方南の空に見えます。");
-    else if (angle >= 160 && angle <= 200) setStatus("【満月】太陽の正面に位置し、全面が輝いて真夜中に南中します。");
-    else if (angle >= 250 && angle <= 290) setStatus("【下弦の月】左半分が輝く半月が、夜中に東の空から昇ります。");
-    else setStatus(`月の公転角度: ${angle}°。地球から見た月の光る面積が変化しています。`);
-  }
-  updateMoonDesc();
-
-  function render() {
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#020617";
-    ctx.fillRect(0, 0, w, h);
-
-    const cx = w/2 - 80, cy = h/2;
-    ctx.fillStyle = "#0284c7";
-    ctx.beginPath();
-    ctx.arc(cx, cy, 28, 0, Math.PI*2);
-    ctx.fill();
-
-    const rad = angle * Math.PI / 180;
-    const mx = cx + Math.cos(rad) * 90;
-    const my = cy + Math.sin(rad) * 90;
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`🎮 ${ecoStatusTitle}`, bx + 14, by + 22);
 
     ctx.fillStyle = "#facc15";
-    ctx.beginPath();
-    ctx.arc(mx, my, 12, 0, Math.PI*2);
-    ctx.fill();
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(`ECO-SCORE: ${ecoScore}`, bx + bw - 14, by + 22);
 
-    ctx.strokeStyle = "#eab308";
+    const arenaGrad = ctx.createLinearGradient(bounds.fx, bounds.fy, bounds.fx, bounds.fy + bounds.fh);
+    arenaGrad.addColorStop(0, "#166534");
+    arenaGrad.addColorStop(1, "#14532d");
+    ctx.fillStyle = arenaGrad;
+    ctx.fillRect(bounds.fx, bounds.fy, bounds.fw, bounds.fh);
+    ctx.strokeStyle = "#22c55e";
     ctx.lineWidth = 2;
-    for (let i=-2; i<=2; i++) {
+    ctx.strokeRect(bounds.fx, bounds.fy, bounds.fw, bounds.fh);
+
+    // 植物
+    plants.forEach(p => {
+      ctx.fillStyle = "#4ade80";
       ctx.beginPath();
-      ctx.moveTo(w-20, cy + i*30);
-      ctx.lineTo(w-80, cy + i*30);
+      ctx.ellipse(p.x, p.y, 4, 2.5, 0.3, 0, Math.PI * 2);
+      ctx.ellipse(p.x, p.y, 2.5, 4, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 死骸
+    deadRemains.forEach(d => {
+      ctx.save();
+      ctx.globalAlpha = d.alpha;
+      ctx.fillStyle = "#cbd5e1";
+      ctx.beginPath();
+      ctx.arc(d.x - 3, d.y, 2, 0, Math.PI * 2);
+      ctx.arc(d.x + 3, d.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(d.x - 2, d.y - 1, 4, 2);
+      ctx.restore();
+    });
+
+    // ウサギ
+    herbivores.forEach(hA => {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(hA.x, hA.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = hA.panic > 0 ? "#ef4444" : "#94a3b8";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "#fbcfe8";
+      ctx.fillRect(hA.x - 3, hA.y - 9, 2, 5);
+      ctx.fillRect(hA.x + 1, hA.y - 9, 2, 5);
+
+      ctx.fillStyle = hA.panic > 0 ? "#ef4444" : "#000000";
+      ctx.fillRect(hA.x + (hA.vx > 0 ? 1 : -3), hA.y - 2, 2, 2);
+    });
+
+    // キツネ
+    carnivores.forEach(cA => {
+      ctx.fillStyle = "#ea580c";
+      ctx.beginPath();
+      ctx.arc(cA.x, cA.y, 8.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fed7aa";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(cA.x + (cA.vx > 0 ? 4 : -4), cA.y + 2, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#c2410c";
+      ctx.beginPath();
+      ctx.arc(cA.x - (cA.vx > 0 ? 8 : -8), cA.y + 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 地下分解者ゾーン
+    const soilY = bounds.fy + bounds.fh;
+    const soilH = bh - (soilY - by) - 15;
+    ctx.fillStyle = "#27170a";
+    ctx.fillRect(bounds.fx, soilY, bounds.fw, soilH);
+    ctx.strokeStyle = "#78350f";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bounds.fx, soilY, bounds.fw, soilH);
+
+    decomposers.forEach(d => {
+      d.pulse += 0.05;
+      const wave = Math.sin(d.pulse) * 1.5;
+      ctx.fillStyle = "#f43f5e";
+      ctx.beginPath();
+      ctx.arc(d.x, soilY + 12 + wave, 5, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = "#fef08a";
+      ctx.fillRect(d.x - 1.5, soilY + 12 + wave, 3, 7);
+    });
+
+    co2Particles.forEach(c => {
+      ctx.save();
+      ctx.globalAlpha = c.alpha;
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 8px sans-serif";
+      ctx.fillText("CO₂", c.x, c.y);
+      ctx.restore();
+    });
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🍄 地下の分解者（菌類・細菌）➔ 死骸を有機物からCO₂へ分解し、植物へ還流！", bounds.fx + 8, soilY + soilH - 8);
+  }
+
+  function drawEcoAnalyticsPanel(gx, gy, gw, gh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(gx, gy, gw, gh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    drawPyramidSection(gx + 10, gy + 15, gw - 20, 115);
+    drawHistoryGraphSection(gx + 10, gy + 140, gw - 20, gh - 155);
+  }
+
+  function drawPyramidSection(x, y, w, h) {
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🔺 生態系ピラミッド (生物量)", x, y + 2);
+
+    const cx = x + w / 2;
+    const baseY = y + h - 6;
+    const tierH = 22;
+
+    const plantW = Math.min(w - 10, Math.max(28, plants.length * 2.6));
+    const herbW = Math.min(w - 20, Math.max(18, herbivores.length * 5.2));
+    const carnW = Math.min(w - 35, Math.max(14, carnivores.length * 18.0));
+
+    // 生産者
+    ctx.fillStyle = "#16a34a";
+    ctx.fillRect(cx - plantW / 2, baseY - tierH, plantW, tierH);
+    ctx.strokeStyle = "#4ade80";
+    ctx.strokeRect(cx - plantW / 2, baseY - tierH, plantW, tierH);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`生産者 (植物: ${plants.length})`, cx, baseY - 8);
+
+    // 一次消費者
+    ctx.fillStyle = "#ca8a04";
+    ctx.fillRect(cx - herbW / 2, baseY - tierH * 2 - 3, herbW, tierH);
+    ctx.strokeStyle = "#facc15";
+    ctx.strokeRect(cx - herbW / 2, baseY - tierH * 2 - 3, herbW, tierH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`一次消費者 (ウサギ: ${herbivores.length})`, cx, baseY - tierH - 11);
+
+    // 二次消費者
+    ctx.fillStyle = "#dc2626";
+    ctx.fillRect(cx - carnW / 2, baseY - tierH * 3 - 6, carnW, tierH);
+    ctx.strokeStyle = "#f87171";
+    ctx.strokeRect(cx - carnW / 2, baseY - tierH * 3 - 6, carnW, tierH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`二次消費者 (キツネ: ${carnivores.length})`, cx, baseY - tierH * 2 - 14);
+  }
+
+  function drawHistoryGraphSection(x, y, w, h) {
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📈 個体数の時間変化 (動的平衡)", x, y + 2);
+
+    const gx = x + 24, gy = y + 16;
+    const gw = w - 28, gh = h - 45;
+
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    ctx.font = "8px sans-serif";
+    ctx.fillStyle = "#4ade80"; ctx.fillText("― 植物", gx + 6, gy + 11);
+    ctx.fillStyle = "#facc15"; ctx.fillText("― 草食", gx + 54, gy + 11);
+    ctx.fillStyle = "#f87171"; ctx.fillText("― 肉食", gx + 102, gy + 11);
+
+    if (history.length > 1) {
+      ctx.strokeStyle = "#4ade80"; ctx.lineWidth = 1.5; ctx.beginPath();
+      history.forEach((pt, i) => {
+        const px = gx + (i / maxHistory) * gw;
+        const py = gy + gh - Math.min(gh - 2, (pt.plant / 80) * gh);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      ctx.strokeStyle = "#facc15"; ctx.lineWidth = 1.5; ctx.beginPath();
+      history.forEach((pt, i) => {
+        const px = gx + (i / maxHistory) * gw;
+        const py = gy + gh - Math.min(gh - 2, (pt.herb / 45) * gh);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      ctx.strokeStyle = "#f87171"; ctx.lineWidth = 1.5; ctx.beginPath();
+      history.forEach((pt, i) => {
+        const px = gx + (i / maxHistory) * gw;
+        const py = gy + gh - Math.min(gh - 2, (pt.carn / 14) * gh);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
       ctx.stroke();
     }
 
-    animId = requestAnimationFrame(render);
+    const footY = gy + gh + 14;
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "8px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("※草が増えるとウサギが復活し、ウサギが", x, footY);
+    ctx.fillText(" 増えるとキツネが山から戻る自律サイクル！", x, footY + 11);
   }
-  render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      canvas.onmousedown = null;
+    }
+  };
 }
 
-// 食物連鎖 (中3・環境)
-function initC3Foodweb(canvas) {
-  const ctx = canvas.getContext('2d');
-  let plant = 100;
-  let herbivore = 40;
-  let carnivore = 10;
-  let animId;
 
-  const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>草食動物 (シカ・バッタなど) の捕獲・増減:</label>
-      <div style="display:flex; gap:6px;">
-        <button class="btn-action" id="bHerbDec">草食動物を減らす</button>
-        <button class="btn-action secondary" id="bHerbInc">草食動物を増やす</button>
-      </div>
-    </div>
-  `;
 
-  document.getElementById('bHerbDec').onclick = () => {
-    herbivore = Math.max(10, herbivore - 20);
-    plant += 30;
-    carnivore = Math.max(2, carnivore - 5);
-    setStatus("【草食動物の減少】食べられる植物が増加し、エサ不足になった肉食動物が減少しました。");
-  };
-  document.getElementById('bHerbInc').onclick = () => {
-    herbivore += 20;
-    plant = Math.max(20, plant - 30);
-    carnivore += 5;
-    setStatus("【草食動物の増加】植物が激減し、それをエサとする肉食動物が一時的に増加しました。");
-  };
-  setStatus("【生態系ピラミッド】生産者（植物）＞ 一次消費者（草食）＞ 二次消費者（肉食）の数量バランスを観察しましょう。");
 
-  function render() {
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
-    ctx.fillRect(0, 0, w, h);
 
-    const cx = w/2, cy = h/2;
-    ctx.fillStyle = "#22c55e";
-    ctx.fillRect(cx - plant, cy + 40, plant*2, 35);
-    ctx.fillStyle = "#eab308";
-    ctx.fillRect(cx - herbivore, cy, herbivore*2, 35);
-    ctx.fillStyle = "#ef4444";
-    ctx.fillRect(cx - carnivore*2, cy - 40, carnivore*4, 35);
 
-    animId = requestAnimationFrame(render);
-  }
-  render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 </script>
 </body>
 </html>
