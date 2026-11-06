@@ -4783,199 +4783,2209 @@ function initC1Sediment(canvas) {
 
 
 
-// 炭酸水素ナトリウム熱分解 (中2・物質)
+
+
+
+
+
+
+
+// ===================================================================
+// 【2大破損警告モーダル＆傾き調整対応版】炭酸水素ナトリウムの熱分解 (中2・物質)
+// ===================================================================
 function initC2Heat(canvas) {
   const ctx = canvas.getContext('2d');
-  let heating = false;
-  let glassTubeInWater = true;
-  let temp = 20;
+
+  // --- 実験状態 ---
+  let viewMode = "apparatus"; // "apparatus" (主装置), "residue" (残留物の比較)
+  let isTilted = false;       // 試験管の口をわずかに下げたか（初期状態: 水平）
+  let isLit = false;          // バーナー点火中
+  let tubeInLime = true;      // ガラス管が石灰水に入っているか
+  let heatProgress = 0;       // 分解の進行度 (0〜100)
+  let temp = 20;              // 加熱部温度 (℃)
+  let isBroken = false;       // 破損フラグ
+  let brokenReason = "";      // "water" (水滴逆流) または "suckback" (石灰水逆流)
+  let suckBackLevel = 0;      // 逆流した液体の位置 (0〜1)
+  let waterRunBack = 0;       // 水滴が底へ流れる位置 (0〜1)
+  let cobaltTested = false;   // 塩化コバルト紙を当てたか
+  let flameTick = 0;
+  let bubbleTick = 0;
   let animId;
 
-  const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>ガスバーナー加熱:</label>
-      <button class="btn-action ${heating?'':'secondary'}" id="bHeat">${heating?'加熱停止':'加熱開始 🔥'}</button>
-    </div>
-    <div class="ctrl-group">
-      <label>ガラス管の操作 (重要):</label>
-      <button class="btn-action ${glassTubeInWater?'secondary':''}" id="bTube">${glassTubeInWater?'石灰水から抜く':'石灰水に入れる'}</button>
-    </div>
-  `;
+  // 残留物比較用の状態
+  let residueTested = false;
 
-  document.getElementById('bHeat').onclick = () => {
-    if (heating && glassTubeInWater) {
-      setStatus("【危険・逆流注意！】火を消す前に必ずガラス管を石灰水から抜いてください！冷えた試験管に液体が逆流して破損します！", true);
+  // 警告モーダル用画像
+  const warningImages = {
+    water: new Image(),
+    suckback: new Image()
+  };
+  warningImages.water.src = 'broken_water.jpg';
+  warningImages.suckback.src = 'broken_suckback.jpg';
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    if (viewMode === "apparatus") {
+      controls.innerHTML = `
+        <div class="ctrl-group">
+          <label>1. 試験管の設置（安全確認）:</label>
+          <button class="btn-action ${isTilted ? '' : 'secondary'}" id="bTilt" ${isLit || isBroken ? 'disabled style="opacity:0.4;"' : ''}>
+            ${isTilted ? '✅ 試験管の口を下げています（安全）' : '⚠️ 試験管の口をわずかに下げる（クリック）'}
+          </button>
+        </div>
+        <div class="ctrl-group">
+          <label>2. ガスバーナー操作:</label>
+          <button class="btn-action ${isLit ? 'secondary' : ''}" id="bHeat" ${isBroken ? 'disabled style="opacity:0.4;"' : ''} style="${!isLit ? 'background:#ef4444; border-color:#ef4444;' : ''}">
+            ${isLit ? '加熱を止める ⏹️' : '加熱を開始する 🔥'}
+          </button>
+        </div>
+        <div class="ctrl-group">
+          <label>3. 誘導管（ガラス管）の操作 【重要】:</label>
+          <button class="btn-action ${tubeInLime ? 'secondary' : ''}" id="bTube" ${isBroken ? 'disabled style="opacity:0.4;"' : ''}>
+            ${tubeInLime ? '石灰水からガラス管を抜く ↗️' : '石灰水にガラス管を入れる ↘️'}
+          </button>
+        </div>
+        <div class="ctrl-group">
+          <label>4. 生成された液体の確認:</label>
+          <button class="btn-action secondary" id="bCobalt" ${isBroken ? 'disabled style="opacity:0.4;"' : ''}>
+            青色の塩化コバルト紙を管口に当てる 📄
+          </button>
+        </div>
+        <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+          <button class="btn-action" id="bToResidue" style="background:#0d9488; border-color:#0d9488; flex:2;">
+            🧪 残留物の性質を比べる (NaHCO₃ vs Na₂CO₃)
+          </button>
+          <button class="btn-action secondary" id="bReset" style="flex:1;">実験をリセット 🔄</button>
+        </div>
+      `;
+
+      document.getElementById('bTilt').onclick = () => {
+        isTilted = !isTilted;
+        renderControls();
+        updateStatus();
+      };
+      document.getElementById('bHeat').onclick = toggleHeat;
+      document.getElementById('bTube').onclick = toggleTube;
+      document.getElementById('bCobalt').onclick = testCobalt;
+      document.getElementById('bToResidue').onclick = () => { viewMode = "residue"; renderControls(); updateStatus(); };
+      document.getElementById('bReset').onclick = resetExp;
+    } else {
+      // 残留物比較モード
+      controls.innerHTML = `
+        <div class="ctrl-group" style="grid-column: 1 / -1;">
+          <label>試験管A（加熱前: 炭酸水素ナトリウム）と 試験管B（加熱後: 炭酸ナトリウム）の比較操作:</label>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button class="btn-action" id="bAddWaterPhenol" style="flex:2;">
+              💧 水を注いで振り、フェノールフタレイン溶液を加える
+            </button>
+            <button class="btn-action secondary" id="bBackApparatus" style="flex:1;">
+              ← 実験装置に戻る
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('bAddWaterPhenol').onclick = () => {
+        residueTested = true;
+        renderControls();
+        updateStatus();
+      };
+      document.getElementById('bBackApparatus').onclick = () => {
+        viewMode = "apparatus";
+        renderControls();
+        updateStatus();
+      };
+    }
+  }
+
+  function toggleHeat() {
+    if (isBroken) return;
+    if (isLit) {
+      // 火を消すときの逆流チェック
+      isLit = false;
+      if (tubeInLime && heatProgress > 15) {
+        // 【事故②】ガラス管を抜かずに消火
+        triggerSuckBackBreak();
+        return;
+      }
+      updateStatus();
+    } else {
+      isLit = true;
+      updateStatus();
+    }
+    renderControls();
+  }
+
+  function toggleTube() {
+    if (isBroken) return;
+    tubeInLime = !tubeInLime;
+    renderControls();
+    updateStatus();
+  }
+
+  function testCobalt() {
+    if (heatProgress < 20) {
+      setStatus("管口にまだ水滴が十分に生じていません。もう少し加熱してから試してみましょう。", true);
       return;
     }
-    heating = !heating;
-    document.getElementById('bHeat').className = `btn-action ${heating?'':'secondary'}`;
-    document.getElementById('bHeat').textContent = heating ? '加熱停止' : '加熱開始 🔥';
-  };
+    cobaltTested = true;
+    updateStatus();
+  }
 
-  document.getElementById('bTube').onclick = () => {
-    glassTubeInWater = !glassTubeInWater;
-    document.getElementById('bTube').textContent = glassTubeInWater ? '石灰水から抜く' : '石灰水に入れる';
-  };
+  // 【事故①】口を下げずに加熱したため水滴が底に流れて破損
+  function triggerWaterBreak() {
+    isLit = false;
+    brokenReason = "water";
+    const interval = setInterval(() => {
+      waterRunBack += 0.1;
+      if (waterRunBack >= 1.0) {
+        clearInterval(interval);
+        isBroken = true;
+        renderControls();
+        showWarningModal(
+          "water",
+          "【試験管破損！】試験管が割れてしまいました！",
+          "理由：試験管の口を水平（または上向き）にしたまま加熱したため、発生した水滴が熱い試験管の底へ流れ落ち、急激に冷やされたことでガラスが割れてしまいました。\n\n対策：発生した液体が加熱部分に流れ込まないよう、必ず『試験管の口をわずかに下げて』加熱しましょう。"
+        );
+      }
+    }, 40);
+  }
 
-  function loop() {
-    if (heating && temp < 200) temp += 0.5;
-    if (!heating && temp > 20) temp -= 0.3;
+  // 【事故②】ガラス管を抜かずに消火したため石灰水が逆流して破損
+  function triggerSuckBackBreak() {
+    brokenReason = "suckback";
+    const interval = setInterval(() => {
+      suckBackLevel += 0.08;
+      if (suckBackLevel >= 1.0) {
+        clearInterval(interval);
+        isBroken = true;
+        renderControls();
+        showWarningModal(
+          "suckback",
+          "【試験管破損！】試験管が割れてしまいました！",
+          "理由：火を消す前にガラス管を石灰水から抜かなかったため、試験管内が冷えて気圧（空気の体積）が下がり、石灰水が逆流して熱い試験管の底に触れて急冷され割れてしまいました。\n\n対策：火を消す前に『必ずガラス管を石灰水から抜く』手順を徹底しましょう。"
+        );
+      }
+    }, 50);
+  }
+
+  // 警告モーダル表示関数
+  function showWarningModal(type, title, reasonText) {
+    setStatus(title + "（画面をクリックすると詳細モーダルを閉じます）", true);
+
+    let modal = document.getElementById('heatWarningModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'heatWarningModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.88)';
+    modal.style.zIndex = '9999';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.padding = '20px';
+    modal.style.cursor = 'pointer';
+
+    const card = document.createElement('div');
+    card.style.background = '#0f172a';
+    card.style.border = '2px solid #ef4444';
+    card.style.borderRadius = '14px';
+    card.style.maxWidth = '600px';
+    card.style.width = '90%';
+    card.style.padding = '24px';
+    card.style.boxShadow = '0 0 35px rgba(239, 68, 68, 0.5)';
+    card.style.textAlign = 'center';
+    card.style.color = '#ffffff';
+
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+    heading.style.color = '#ef4444';
+    heading.style.fontSize = '20px';
+    heading.style.marginBottom = '14px';
+    card.appendChild(heading);
+
+    // 画像の表示（フォールバック付き）
+    const imgObj = warningImages[type];
+    if (imgObj && imgObj.complete && imgObj.naturalWidth !== 0) {
+      const img = document.createElement('img');
+      img.src = imgObj.src;
+      img.alt = title;
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '240px';
+      img.style.borderRadius = '8px';
+      img.style.marginBottom = '14px';
+      img.style.objectFit = 'contain';
+      card.appendChild(img);
+    } else {
+      const imgPlaceholder = document.createElement('div');
+      imgPlaceholder.style.background = '#1e293b';
+      imgPlaceholder.style.border = '1px dashed #64748b';
+      imgPlaceholder.style.borderRadius = '8px';
+      imgPlaceholder.style.padding = '18px';
+      imgPlaceholder.style.marginBottom = '14px';
+      imgPlaceholder.style.fontSize = '13px';
+      imgPlaceholder.style.color = '#cbd5e1';
+      imgPlaceholder.innerHTML = `💥 <strong>【破損シミュレーション画像枠】</strong><br><small style="color:#94a3b8;">${type === 'water' ? 'broken_water.jpg' : 'broken_suckback.jpg'} を配置すると画像が表示されます</small>`;
+      card.appendChild(imgPlaceholder);
+    }
+
+    const desc = document.createElement('p');
+    desc.style.fontSize = '14px';
+    desc.style.lineHeight = '1.7';
+    desc.style.whiteSpace = 'pre-wrap';
+    desc.style.textAlign = 'left';
+    desc.style.background = '#1e293b';
+    desc.style.padding = '14px';
+    desc.style.borderRadius = '8px';
+    desc.style.color = '#f1f5f9';
+    desc.textContent = reasonText;
+    card.appendChild(desc);
+
+    const closeTip = document.createElement('p');
+    closeTip.textContent = 'クリックすると閉じて、リセットしてやり直せます';
+    closeTip.style.fontSize = '12px';
+    closeTip.style.color = '#94a3b8';
+    closeTip.style.marginTop = '14px';
+    card.appendChild(closeTip);
+
+    modal.appendChild(card);
+    modal.onclick = () => {
+      modal.remove();
+    };
+
+    document.body.appendChild(modal);
+  }
+
+  function resetExp() {
+    isLit = false;
+    isTilted = false;
+    tubeInLime = true;
+    heatProgress = 0;
+    temp = 20;
+    isBroken = false;
+    brokenReason = "";
+    suckBackLevel = 0;
+    waterRunBack = 0;
+    cobaltTested = false;
+    residueTested = false;
+    const modal = document.getElementById('heatWarningModal');
+    if (modal) modal.remove();
+    renderControls();
+    setStatus("実験装置を再配置しました。安全のために試験管の口を下げてから加熱を始めましょう。");
+  }
+
+  function updateStatus() {
+    if (isBroken) {
+      setStatus("【試験管破損】安全手順を守ってリセットボタンからやり直しましょう。", true);
+      return;
+    }
+
+    if (viewMode === "residue") {
+      if (!residueTested) {
+        setStatus("【固体残留物の比較】加熱前の「炭酸水素ナトリウム」と、加熱後に残った「炭酸ナトリウム」です。水への溶けやすさとアルカリ性の強さを確かめましょう。");
+      } else {
+        setStatus("【検証結果】①水への溶解：炭酸水素ナトリウムは溶けにくく白く濁るが、炭酸ナトリウムはよく溶ける。②フェノールフタレイン：炭酸水素ナトリウムは『うすい赤色（弱アルカリ性）』、炭酸ナトリウムは『濃い赤色（強アルカリ性）』に変色！");
+      }
+      return;
+    }
+
+    if (cobaltTested) {
+      setStatus("【液体の正体＝水】青色の塩化コバルト紙が『鮮やかな赤色（桃色）』に変色しました！これにより、管口に生じた透明な液体が「水」であることが証明されました。");
+      return;
+    }
+
+    if (isLit) {
+      if (!isTilted && heatProgress > 22) {
+        // 口を下げていない状態で水滴が生じたので破損発火
+        triggerWaterBreak();
+        return;
+      }
+
+      if (heatProgress < 30) {
+        setStatus("【加熱中】試験管内の空気が膨張して出ています。管口付近に水滴がつき始めました。");
+      } else if (heatProgress < 85) {
+        if (tubeInLime) {
+          setStatus("【二酸化炭素の発生】発生した気体が石灰水を通ると、ポコポコと泡立って『白く濁り』ました！二酸化炭素が発生している証拠です。");
+        } else {
+          setStatus("【気体放出中】ガラス管が石灰水から抜かれています。");
+        }
+      } else {
+        setStatus("【分解完了】炭酸水素ナトリウムがすべて分解されました。火を消すときは【必ずガラス管を抜いてから】消火してください！");
+      }
+    } else {
+      if (heatProgress >= 80) {
+        setStatus("【安全に消火完了！】ガラス管を先に抜いてから消火したため、安全に操作できました。『残留物の性質を比べる』ボタンを押してみましょう！");
+      } else {
+        setStatus(isTilted
+          ? "試験管の口を下げています（安全）。ガスバーナーに点火して加熱を始めましょう。"
+          : "⚠️ 試験管が水平です。このまま加熱すると発生した水滴が底へ逆流して割れる恐れがあります。『試験管の口を下げる』ボタンを押してください。"
+        );
+      }
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
+  function render() {
+    flameTick += 0.25;
+    bubbleTick++;
 
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#090d16";
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(w/2 - 120, h/2 - 30, 160, 40);
+    if (viewMode === "apparatus") {
+      drawApparatusView(w, h);
+    } else {
+      drawResidueView(w, h);
+    }
 
-    ctx.fillStyle = "#f8fafc";
-    ctx.fillRect(w/2 - 116, h/2 - 10, 50, 16);
+    animId = requestAnimationFrame(render);
+  }
+  render();
 
-    if (heating) {
-      ctx.fillStyle = "#38bdf8";
+  // ========================================================
+  // 1. 実験装置メイン画面
+  // ========================================================
+  function drawApparatusView(w, h) {
+    if (isLit && !isBroken) {
+      if (temp < 250) temp += 0.8;
+      if (heatProgress < 100) heatProgress += 0.14;
+
+      // 口を下げずに加熱した場合の破壊トリガーチェック
+      if (!isTilted && heatProgress > 22 && brokenReason === "") {
+        triggerWaterBreak();
+      }
+    } else {
+      if (temp > 20) temp -= 0.6;
+    }
+
+    // --- A. 鉄製スタンド ---
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(60, h - 35, 120, 15);
+    ctx.fillRect(80, 50, 10, h - 85);
+
+    ctx.fillStyle = "#475569";
+    ctx.fillRect(80, 115, 60, 10);
+    ctx.fillRect(135, 105, 14, 30);
+
+    // --- B. 試験管の描画（isTilted: trueなら傾き約6度、falseなら水平0度） ---
+    const originX = 140, originY = 120;
+    const tubeLength = 170, tubeR = 15;
+    const tiltAngle = isTilted ? 0.09 : 0.0; // ボタンで変化！
+
+    ctx.save();
+    ctx.translate(originX, originY);
+    ctx.rotate(tiltAngle);
+
+    // 加熱前の白い粉末 / 残留物
+    const powderColor = heatProgress > 70 ? "#e2e8f0" : "#ffffff";
+    ctx.fillStyle = powderColor;
+    ctx.beginPath();
+    ctx.arc(15, 0, tubeR - 2, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.lineTo(55, -tubeR + 2);
+    ctx.lineTo(55, tubeR - 2);
+    ctx.closePath();
+    ctx.fill();
+
+    // 試験管ガラス管体
+    ctx.strokeStyle = isBroken ? "#ef4444" : "rgba(203, 213, 225, 0.85)";
+    ctx.lineWidth = 3;
+    ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+    ctx.beginPath();
+    ctx.arc(15, 0, tubeR, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.lineTo(tubeLength, -tubeR);
+    ctx.lineTo(tubeLength, tubeR);
+    ctx.lineTo(15, tubeR);
+    ctx.stroke();
+    ctx.fill();
+
+    // 割れたヒビのアニメーション
+    if (isBroken) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(w/2 - 90, h/2 + 25, 12, 0, Math.PI*2);
+      ctx.moveTo(15, -12); ctx.lineTo(32, -2); ctx.lineTo(18, 12);
+      ctx.moveTo(32, -2); ctx.lineTo(48, 4);
+      ctx.stroke();
+    }
+
+    // 【事故①】水滴が底に逆流して流れるアニメーション
+    if (waterRunBack > 0) {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.9)";
+      const wPosX = (tubeLength - 30) - (tubeLength - 60) * waterRunBack;
+      ctx.beginPath();
+      ctx.arc(wPosX, tubeR - 4, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.strokeRect(w/2 + 80, h/2 - 10, 60, 70);
-    ctx.fillStyle = temp > 80 && glassTubeInWater ? "rgba(255,255,255,0.8)" : "rgba(56,189,248,0.3)";
-    ctx.fillRect(w/2 + 82, h/2 + 15, 56, 43);
-
-    if (temp > 80 && glassTubeInWater) {
-      setStatus("【熱分解中】二酸化炭素が発生し石灰水が白く濁っています。管口には水滴が付着しています。");
+    // 【事故②】逆流した石灰水
+    if (suckBackLevel > 0) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+      const currentFillX = tubeLength - (tubeLength - 10) * suckBackLevel;
+      ctx.fillRect(currentFillX, -tubeR + 2, tubeLength - currentFillX, tubeR * 2 - 4);
     }
 
-    animId = requestAnimationFrame(loop);
-  }
-  loop();
+    // 管口の水滴（結露）
+    if (heatProgress > 15) {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.85)";
+      const dropCount = Math.min(8, Math.floor(heatProgress / 12));
+      for (let i = 0; i < dropCount; i++) {
+        ctx.beginPath();
+        ctx.arc(tubeLength - 30 + (i * 3.5), tubeR - 3, 2.2, 0, Math.PI * 2);
+        ctx.arc(tubeLength - 35 + (i * 3.2), -tubeR + 3, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
-  return { destroy: () => cancelAnimationFrame(animId) };
-}
+    // ゴム栓
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(tubeLength - 4, -tubeR - 2, 14, (tubeR + 2) * 2);
 
-// オームの法則 (中2・エネルギー)
-function initC2Ohm(canvas) {
-  const ctx = canvas.getContext('2d');
-  let volt = 4;
-  let res = 10;
-  let animId;
+    ctx.restore();
 
-  const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>電源電圧: <span id="vVal" class="ctrl-val">${volt} V</span></label>
-      <input type="range" id="vRange" min="1" max="12" value="${volt}">
-    </div>
-    <div class="ctrl-group">
-      <label>抵抗器の抵抗値: <span id="rVal" class="ctrl-val">${res} Ω</span></label>
-      <input type="range" id="rRange" min="2" max="30" value="${res}">
-    </div>
-  `;
+    // 傾きステータス表示
+    if (isTilted) {
+      ctx.fillStyle = "#22c55e";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("▲ 口をわずかに下げています（安全）", originX + 25, originY - 24);
+    } else {
+      ctx.fillStyle = "#f87171";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("⚠️ 口が水平です（水滴逆流の危険！）", originX + 25, originY - 24);
+    }
 
-  document.getElementById('vRange').oninput = (e) => {
-    volt = parseInt(e.target.value);
-    document.getElementById('vVal').textContent = `${volt} V`;
-  };
-  document.getElementById('rRange').oninput = (e) => {
-    res = parseInt(e.target.value);
-    document.getElementById('rVal').textContent = `${res} Ω`;
-  };
+    // --- C. ガスバーナーと炎 ---
+    const burnerX = originX + 25, burnerBaseY = h - 35;
+    ctx.fillStyle = "#475569";
+    ctx.fillRect(burnerX - 22, burnerBaseY - 10, 44, 10);
+    ctx.fillStyle = "#64748b";
+    ctx.fillRect(burnerX - 8, burnerBaseY - 70, 16, 60);
 
-  function render() {
-    const current = volt / res;
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
-    ctx.fillRect(0, 0, w, h);
+    if (isLit && !isBroken) {
+      const fH = 32 + Math.sin(flameTick) * 3;
+      const topBY = burnerBaseY - 70;
+      ctx.fillStyle = "rgba(56, 189, 248, 0.75)";
+      ctx.beginPath();
+      ctx.moveTo(burnerX - 7, topBY);
+      ctx.quadraticCurveTo(burnerX - 12, topBY - fH * 0.6, burnerX, topBY - fH);
+      ctx.quadraticCurveTo(burnerX + 12, topBY - fH * 0.6, burnerX + 7, topBY);
+      ctx.fill();
 
-    const cx = w/2, cy = h/2;
-    ctx.strokeStyle = "#38bdf8";
+      ctx.fillStyle = "rgba(37, 99, 235, 0.95)";
+      ctx.beginPath();
+      ctx.moveTo(burnerX - 5, topBY);
+      ctx.lineTo(burnerX, topBY - fH * 0.5);
+      ctx.lineTo(burnerX + 5, topBY);
+      ctx.fill();
+    }
+
+    // --- D. 誘導管 ---
+    const tubeEndX = originX + Math.cos(tiltAngle) * (tubeLength + 10);
+    const tubeEndY = originY + Math.sin(tiltAngle) * (tubeLength + 10);
+    const beakerX = w - 160, beakerY = h - 145, beakerW = 75, beakerH = 110;
+    const glassOutX = beakerX + beakerW / 2;
+    const glassOutY = tubeInLime ? beakerY + beakerH - 18 : beakerY - 15;
+
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(tubeEndX, tubeEndY);
+    ctx.bezierCurveTo(tubeEndX + 50, tubeEndY + 10, glassOutX - 20, beakerY - 45, glassOutX, glassOutY);
+    ctx.stroke();
+
+    // --- E. 石灰水試験管 ---
+    ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 3;
-    ctx.strokeRect(cx - 120, cy - 70, 240, 140);
+    ctx.strokeRect(beakerX, beakerY, beakerW, beakerH);
+
+    const limeAlpha = Math.min(0.9, (heatProgress / 60) * 0.9);
+    const limeColor = heatProgress < 10
+      ? "rgba(56, 189, 248, 0.15)"
+      : `rgba(255, 255, 255, ${0.2 + limeAlpha})`;
+
+    ctx.fillStyle = limeColor;
+    ctx.fillRect(beakerX + 2, beakerY + 30, beakerW - 4, beakerH - 32);
 
     ctx.fillStyle = "#ffffff";
-    ctx.font = "18px sans-serif";
-    ctx.fillText(`電流 I = ${(current*1000).toFixed(0)} mA (${current.toFixed(2)} A)`, cx - 90, cy - 20);
-    ctx.fillText(`電圧 V = ${volt} V`, cx - 90, cy + 15);
-    ctx.fillText(`抵抗 R = ${res} Ω`, cx - 90, cy + 45);
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("石灰水", beakerX + beakerW / 2, beakerY + 20);
 
-    setStatus(`【オームの法則: I = V / R】電圧を上げると電流は比例して増え、抵抗を増やすと電流は反比例して減少します。`);
-    animId = requestAnimationFrame(render);
+    if (heatProgress > 25) {
+      ctx.fillStyle = "#facc15";
+      ctx.font = "10px sans-serif";
+      ctx.fillText(heatProgress > 60 ? "（真っ白に白濁）" : "（白く濁り始め）", beakerX + beakerW / 2, beakerY + beakerH + 18);
+    }
+
+    if (isLit && tubeInLime && !isBroken) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      for (let i = 0; i < 4; i++) {
+        const bx = glassOutX + Math.sin(bubbleTick + i) * 6;
+        const by = beakerY + beakerH - 15 - ((bubbleTick * 2.2 + i * 20) % (beakerH - 45));
+        ctx.beginPath();
+        ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // --- F. 塩化コバルト紙 ---
+    if (cobaltTested) {
+      const paperX = tubeEndX - 20, paperY = tubeEndY + 15;
+      ctx.fillStyle = "#f43f5e";
+      ctx.fillRect(paperX, paperY, 32, 12);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(paperX, paperY, 32, 12);
+
+      ctx.fillStyle = "#f43f5e";
+      ctx.font = "bold 11px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("塩化コバルト紙: 赤色に変色（水）", paperX - 25, paperY + 25);
+    }
+
+    // --- G. 反応式ボックス ---
+    drawFormulaBox(w - 280, 15, 260, 80);
   }
-  render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  function drawFormulaBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📌 炭酸水素ナトリウムの熱分解 反応式", bx + 10, by + 18);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText("2NaHCO₃  →  Na₂CO₃ + CO₂ + H₂O", bx + 10, by + 42);
+
+    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("（白・粉末）       （固体残留物）（気体） （液体）", bx + 10, by + 62);
+  }
+
+  // ========================================================
+  // 2. 残留物の比較画面
+  // ========================================================
+  function drawResidueView(w, h) {
+    const cx = w / 2;
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 16px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("【徹底比較】加熱前の白い粉末 vs 加熱後の白い粉末", cx, 32);
+
+    const tube1X = cx - 140, tube2X = cx + 50;
+    const ty = 70, tw = 90, th = 210;
+
+    drawResidueTube(
+      tube1X, ty, tw, th,
+      "試験管A（加熱前）",
+      "炭酸水素ナトリウム (NaHCO₃)",
+      residueTested ? "溶けにくい（底に残る）" : "水投入前",
+      residueTested ? "うすい赤色（弱アルカリ性）" : "未滴下",
+      residueTested ? "#fbcfe8" : "rgba(255,255,255,0.1)",
+      true
+    );
+
+    drawResidueTube(
+      tube2X, ty, tw, th,
+      "試験管B（加熱後）",
+      "炭酸ナトリウム (Na₂CO₃)",
+      residueTested ? "よく溶ける（透明）" : "水投入前",
+      residueTested ? "濃い赤色（強アルカリ性）" : "未滴下",
+      residueTested ? "#e11d48" : "rgba(255,255,255,0.1)",
+      false
+    );
+
+    const summaryY = ty + th + 25;
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(cx - 260, summaryY, 520, 60);
+    ctx.strokeStyle = "#0d9488";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(cx - 260, summaryY, 520, 60);
+
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("💡 テスト必出！2つの物質の違いの整理：", cx - 245, summaryY + 20);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "11px sans-serif";
+    ctx.fillText("・水への溶解度：炭酸ナトリウム(後) ＞ 炭酸水素ナトリウム(前)", cx - 245, summaryY + 38);
+    ctx.fillText("・アルカリ性の強さ：炭酸ナトリウム(強・濃赤) ＞ 炭酸水素ナトリウム(弱・うすい赤)", cx - 245, summaryY + 52);
+  }
+
+  function drawResidueTube(bx, by, bw, bh, tag, name, solText, ptText, liquidColor, hasPrecip) {
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = liquidColor;
+    ctx.fillRect(bx + 2, by + 50, bw - 4, bh - 52);
+
+    if (residueTested && hasPrecip) {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.ellipse(bx + bw / 2, by + bh - 6, bw * 0.35, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (!residueTested) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(bx + 15, by + bh - 15, bw - 30, 13);
+    }
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(tag, bx + bw / 2, by - 12);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(name, bx + bw / 2, by + 25);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(`水への溶解: ${solText}`, bx + bw / 2, by + bh + 16);
+    ctx.fillText(`フェノール呈色: ${ptText}`, bx + bw / 2, by + bh + 30);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('heatWarningModal');
+      if (modal) modal.remove();
+    }
+  };
 }
 
-// デンプンの消化 (中2・生命)
-function initC2Digestion(canvas) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【完全統合・回路ベンチ修正版】オームの法則と回路シミュレーション (中2・エネルギー)
+// ===================================================================
+function initC2Ohm(canvas) {
   const ctx = canvas.getContext('2d');
-  let reagent = 'iodine';
-  let hasSaliva = true;
-  let heated = false;
+
+  // 回路構成: 'single'(単体), 'series'(直列), 'parallel'(並列), 'short_current'(電流計並列ミス), 'series_volt'(電圧計直列ミス)
+  let circuitType = 'single';
+  let volt = 4.0;          // 電源電圧 (0.0 〜 10.0 V)
+  let resA = 10;           // 抵抗器A (5 〜 50 Ω)
+  let resB = 20;           // 抵抗器B (5 〜 50 Ω)
+  let isSwitchOn = true;   // スイッチ
+
+  // メーター端子設定
+  let currentRange = '500mA'; // '5A', '500mA', '50mA'
+  let voltRange = '15V';       // '300V', '15V', '3V'
+  let activeMeterTab = 'current'; // 右上拡大表示: 'current' または 'volt'
+
+  // グラフプロット記録用
+  const plotPoints = [];
+
+  // 電子の流速・パーティクル
+  let electronTick = 0;
   let animId;
 
   const controls = document.getElementById('labControlsArea');
-  controls.innerHTML = `
-    <div class="ctrl-group">
-      <label>試験管の内容液:</label>
-      <select id="tubeSelect" class="search-input" style="padding:6px;">
-        <option value="saliva">デンプン溶液 ＋ だ液 (分解あり)</option>
-        <option value="water">デンプン溶液 ＋ 水 (対照実験・分解なし)</option>
-      </select>
-    </div>
-    <div class="ctrl-group">
-      <label>検出試薬・操作:</label>
-      <div style="display:flex; gap:8px;">
-        <button class="btn-action" id="bIodine">ヨウ素液を加える</button>
-        <button class="btn-action secondary" id="bBenedict">ベネジクト液で加熱</button>
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group" style="grid-column: 1 / -1;">
+        <label>1. 回路の接続タイプ:</label>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn-action ${circuitType==='single'?'':'secondary'}" id="bTypeSingle">基本（抵抗器1個）</button>
+          <button class="btn-action ${circuitType==='series'?'':'secondary'}" id="bTypeSeries">直列回路（抵抗A＋B）</button>
+          <button class="btn-action ${circuitType==='parallel'?'':'secondary'}" id="bTypeParallel">並列回路（抵抗A // B）</button>
+          <button class="btn-action ${circuitType==='short_current'?'':'secondary'}" id="bTypeShort" style="${circuitType==='short_current'?'background:#ef4444; border-color:#ef4444;':''}">⚠️ 誤配線: 電流計を並列接続</button>
+          <button class="btn-action ${circuitType==='series_volt'?'':'secondary'}" id="bTypeVoltSeries" style="${circuitType==='series_volt'?'background:#eab308; border-color:#eab308;':''}">⚠️ 誤配線: 電圧計を直列接続</button>
+        </div>
       </div>
-    </div>
-  `;
 
-  document.getElementById('tubeSelect').onchange = (e) => {
-    hasSaliva = e.target.value === 'saliva';
-    updateView();
-  };
-  document.getElementById('bIodine').onclick = () => { reagent='iodine'; heated=false; updateView(); };
-  document.getElementById('bBenedict').onclick = () => { reagent='benedict'; heated=true; updateView(); };
+      <div class="ctrl-group">
+        <label>2. 電源装置の電圧: <span id="vVal" class="ctrl-val">${volt.toFixed(1)} V</span></label>
+        <input type="range" id="vRange" min="0" max="100" value="${Math.round(volt * 10)}">
+      </div>
 
-  function updateView() {
-    if (reagent === 'iodine') {
-      if (hasSaliva) setStatus("【だ液あり＋ヨウ素液】だ液アミラーゼによってデンプンが分解されたため、青紫色への変色は起こりません。");
-      else setStatus("【水＋ヨウ素液】デンプンがそのまま残っているため、鮮やかな青紫色に変色しました！");
+      <div class="ctrl-group">
+        <label>3. 抵抗器の抵抗値:</label>
+        <div style="display:flex; gap:10px;">
+          <div style="flex:1;">
+            <span style="font-size:11px; color:#94a3b8;">抵抗A: <b id="raVal" style="color:#38bdf8;">${resA} Ω</b></span>
+            <input type="range" id="raRange" min="5" max="50" value="${resA}">
+          </div>
+          ${circuitType === 'series' || circuitType === 'parallel' ? `
+          <div style="flex:1;">
+            <span style="font-size:11px; color:#94a3b8;">抵抗B: <b id="rbVal" style="color:#f43f5e;">${resB} Ω</b></span>
+            <input type="range" id="rbRange" min="5" max="50" value="${resB}">
+          </div>
+          ` : ''}
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>4. 電流計・電圧計の端子選択 (－端子):</label>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div>
+            <span style="font-size:11px; color:#94a3b8;">電流計端子:</span>
+            <div style="display:flex; gap:4px; margin-top:2px;">
+              <button class="btn-action ${currentRange==='5A'?'':'secondary'}" id="bI5A" style="padding:4px 8px; font-size:11px;">5A</button>
+              <button class="btn-action ${currentRange==='500mA'?'':'secondary'}" id="bI500m" style="padding:4px 8px; font-size:11px;">500mA</button>
+              <button class="btn-action ${currentRange==='50mA'?'':'secondary'}" id="bI50m" style="padding:4px 8px; font-size:11px;">50mA</button>
+            </div>
+          </div>
+          <div>
+            <span style="font-size:11px; color:#94a3b8;">電圧計端子:</span>
+            <div style="display:flex; gap:4px; margin-top:2px;">
+              <button class="btn-action ${voltRange==='300V'?'':'secondary'}" id="bV300" style="padding:4px 8px; font-size:11px;">300V</button>
+              <button class="btn-action ${voltRange==='15V'?'':'secondary'}" id="bV15" style="padding:4px 8px; font-size:11px;">15V</button>
+              <button class="btn-action ${voltRange==='3V'?'':'secondary'}" id="bV3" style="padding:4px 8px; font-size:11px;">3V</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-action ${isSwitchOn?'':'secondary'}" id="bSwitch" style="flex:1;">
+          ${isSwitchOn ? 'スイッチを「切る」 (OFF)' : 'スイッチを「入れる」 (ON)'}
+        </button>
+        <button class="btn-action secondary" id="bPlot" style="flex:1;">📊 現在の値をグラフにプロット</button>
+        <button class="btn-action secondary" id="bClearPlot" style="flex:1;">グラフの点をクリア</button>
+      </div>
+    `;
+
+    // イベントリスナー
+    document.getElementById('bTypeSingle').onclick = () => { circuitType = 'single'; renderControls(); updateStatus(); };
+    document.getElementById('bTypeSeries').onclick = () => { circuitType = 'series'; renderControls(); updateStatus(); };
+    document.getElementById('bTypeParallel').onclick = () => { circuitType = 'parallel'; renderControls(); updateStatus(); };
+    document.getElementById('bTypeShort').onclick = () => { circuitType = 'short_current'; renderControls(); updateStatus(); };
+    document.getElementById('bTypeVoltSeries').onclick = () => { circuitType = 'series_volt'; renderControls(); updateStatus(); };
+
+    document.getElementById('vRange').oninput = (e) => {
+      volt = parseInt(e.target.value) / 10;
+      document.getElementById('vVal').textContent = `${volt.toFixed(1)} V`;
+      updateStatus();
+    };
+    document.getElementById('raRange').oninput = (e) => {
+      resA = parseInt(e.target.value);
+      document.getElementById('raVal').textContent = `${resA} Ω`;
+      updateStatus();
+    };
+    const rbEl = document.getElementById('rbRange');
+    if (rbEl) {
+      rbEl.oninput = (e) => {
+        resB = parseInt(e.target.value);
+        document.getElementById('rbVal').textContent = `${resB} Ω`;
+        updateStatus();
+      };
+    }
+
+    document.getElementById('bI5A').onclick = () => { currentRange = '5A'; renderControls(); updateStatus(); };
+    document.getElementById('bI500m').onclick = () => { currentRange = '500mA'; renderControls(); updateStatus(); };
+    document.getElementById('bI50m').onclick = () => { currentRange = '50mA'; renderControls(); updateStatus(); };
+
+    document.getElementById('bV300').onclick = () => { voltRange = '300V'; renderControls(); updateStatus(); };
+    document.getElementById('bV15').onclick = () => { voltRange = '15V'; renderControls(); updateStatus(); };
+    document.getElementById('bV3').onclick = () => { voltRange = '3V'; renderControls(); updateStatus(); };
+
+    document.getElementById('bSwitch').onclick = () => {
+      isSwitchOn = !isSwitchOn;
+      renderControls();
+      updateStatus();
+    };
+    document.getElementById('bPlot').onclick = () => {
+      if (!isSwitchOn) {
+        setStatus("スイッチが入っていません。スイッチを入れてからプロットしてください。", true);
+        return;
+      }
+      const sim = calculateCircuit();
+      plotPoints.push({
+        v: sim.circuitV,
+        i: sim.totalI,
+        type: circuitType
+      });
+      setStatus(`グラフに測定点（電圧: ${sim.circuitV.toFixed(1)}V, 電流: ${(sim.totalI * 1000).toFixed(0)}mA）をプロットしました！`);
+    };
+    document.getElementById('bClearPlot').onclick = () => {
+      plotPoints.length = 0;
+      setStatus("プロットしたグラフの点をクリアしました。");
+    };
+  }
+
+  // --- 回路計算 ---
+  function calculateCircuit() {
+    if (!isSwitchOn) {
+      return { totalR: 0, totalI: 0, iA: 0, iB: 0, vA: 0, vB: 0, circuitV: volt, isShort: false, isBlocked: false };
+    }
+
+    if (circuitType === 'short_current') {
+      const rInternal = 0.5;
+      const iShort = volt / rInternal;
+      return { totalR: rInternal, totalI: iShort, iA: 0, iB: 0, vA: 0, vB: 0, circuitV: volt, isShort: true, isBlocked: false };
+    }
+
+    if (circuitType === 'series_volt') {
+      const rVoltmeter = 100000;
+      const totalR = resA + rVoltmeter;
+      const iFlow = volt / totalR;
+      return { totalR: totalR, totalI: iFlow, iA: iFlow, iB: 0, vA: 0, vB: 0, circuitV: volt, isShort: false, isBlocked: true };
+    }
+
+    if (circuitType === 'single') {
+      const totalR = resA;
+      const totalI = volt / totalR;
+      return { totalR, totalI, iA: totalI, iB: 0, vA: volt, vB: 0, circuitV: volt, isShort: false, isBlocked: false };
+    } else if (circuitType === 'series') {
+      const totalR = resA + resB;
+      const totalI = volt / totalR;
+      const vA = totalI * resA;
+      const vB = totalI * resB;
+      return { totalR, totalI, iA: totalI, iB: totalI, vA, vB, circuitV: volt, isShort: false, isBlocked: false };
     } else {
-      if (hasSaliva) setStatus("【だ液あり＋ベネジクト液加熱】デンプンが麦芽糖などに分解されたため、赤褐色（黄褐色）の沈殿が生じました！");
-      else setStatus("【水＋ベネジクト液加熱】糖が生じていないため、青色のままで変化しません。");
+      // parallel
+      const totalR = (resA * resB) / (resA + resB);
+      const iA = volt / resA;
+      const iB = volt / resB;
+      const totalI = iA + iB;
+      return { totalR, totalI, iA, iB, vA: volt, vB: volt, circuitV: volt, isShort: false, isBlocked: false };
     }
   }
 
+  function updateStatus() {
+    const sim = calculateCircuit();
+
+    if (!isSwitchOn) {
+      setStatus("【回路遮断】スイッチがOFFです。回路に電流は流れていません。");
+      return;
+    }
+
+    if (sim.isShort) {
+      setStatus("【危険！大電流ショート事故】電流計を並列につないだため、抵抗器を通らず電流計に過大な電流（約" + sim.totalI.toFixed(1) + "A）が流れ込みました！電流計が焼き切れる重大事故になります。電流計は必ず直列につなぎましょう！", true);
+      return;
+    }
+
+    if (sim.isBlocked) {
+      setStatus("【電流が流れない！】電圧計を直列につないだため、電圧計の極めて大きな内部抵抗によって電流が完全にストップしました（I ≒ 0A）。電圧計は必ず測りたい部分に「並列」につなぎます。", true);
+      return;
+    }
+
+    const maxCurrent = currentRange === '5A' ? 5.0 : (currentRange === '500mA' ? 0.5 : 0.05);
+    const maxVolt = voltRange === '300V' ? 300.0 : (voltRange === '15V' ? 15.0 : 3.0);
+
+    if (sim.totalI > maxCurrent * 1.05) {
+      setStatus(`【警告！電流計が振り切れています】端子（${currentRange}）に対して電流（${(sim.totalI*1000).toFixed(0)}mA）が大きすぎます！針が破損するため、直ちに大きな端子（5Aなど）に切り替えてください。`, true);
+      return;
+    }
+    if (sim.circuitV > maxVolt * 1.05) {
+      setStatus(`【警告！電圧計が振り切れています】端子（${voltRange}）に対して電圧（${sim.circuitV.toFixed(1)}V）が大きすぎます！直ちに大きな端子（15Vなど）に切り替えてください。`, true);
+      return;
+    }
+
+    const iText = (sim.totalI * 1000).toFixed(0) + " mA (" + sim.totalI.toFixed(2) + " A)";
+    if (circuitType === 'single') {
+      setStatus(`【オームの法則: V = I × R】全電流: ${iText} ／ 合成抵抗: ${sim.totalR.toFixed(1)} Ω。電圧を上げると電流はきれいに比例して増えます。`);
+    } else if (circuitType === 'series') {
+      setStatus(`【直列回路】全抵抗 R = RA(${resA}Ω) + RB(${resB}Ω) ＝ ${sim.totalR.toFixed(1)} Ω。電流は回路のどこでも等しく（${iText}）、電圧は各抵抗の比に分割されます。`);
+    } else if (circuitType === 'parallel') {
+      setStatus(`【並列回路】各抵抗にかかる電圧は等しく（${sim.circuitV.toFixed(1)}V）、枝分かれした電流の和が全電流（${(sim.iA*1000).toFixed(0)}mA + ${(sim.iB*1000).toFixed(0)}mA ＝ ${iText}）になります。合成抵抗（${sim.totalR.toFixed(1)}Ω）は各抵抗より小さくなります！`);
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // クリックでメーター拡大タブの切り替え
+  canvas.onmousedown = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const rightX = canvas.width - 245;
+    const tabY = 15;
+    const tabW = 110, tabH = 24;
+
+    if (mx >= rightX && mx <= rightX + tabW && my >= tabY && my <= tabY + tabH) {
+      activeMeterTab = 'current';
+    } else if (mx >= rightX + tabW + 5 && mx <= rightX + tabW * 2 + 5 && my >= tabY && my <= tabY + tabH) {
+      activeMeterTab = 'volt';
+    }
+  };
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
   function render() {
+    electronTick += 0.4;
     const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
-    const tx = w/2 - 30, ty = h/2 - 70, tw = 60, th = 140;
-    ctx.strokeStyle = "#94a3b8";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(tx, ty, tw, th);
+    const sim = calculateCircuit();
 
-    let liquidColor = "rgba(226,232,240,0.5)";
-    if (reagent === 'iodine') {
-      liquidColor = hasSaliva ? "#fef08a" : "#1e1b4b";
-    } else if (reagent === 'benedict') {
-      liquidColor = hasSaliva ? "#b45309" : "#0284c7";
-    }
-    ctx.fillStyle = liquidColor;
-    ctx.fillRect(tx+2, ty+th/2, tw-4, th/2-2);
+    // 1. 回路ベンチ（左側エリア）
+    const benchW = w - 260;
+    drawCircuitBench(benchW, h, sim);
+
+    // 2. 右側パネル（メーター拡大 ＆ V-I方眼グラフ）
+    const rightX = w - 245;
+    const rightW = 230;
+    drawMeterDetailPanel(rightX, 15, rightW, 175, sim);
+    drawGraphPanel(rightX, 205, rightW, h - 220, sim);
 
     animId = requestAnimationFrame(render);
   }
   render();
 
-  return { destroy: () => cancelAnimationFrame(animId) };
+  // ========================================================
+  // A. 回路ベンチの描画（位置のゆとりと並列合流を完全修正）
+  // ========================================================
+  function drawCircuitBench(bw, bh, sim) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    // 回路タイトル（上部に余白を確保）
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    const typeLabel = {
+      single: "🔌 基本回路（単体抵抗）",
+      series: "🔌 直列回路（電流どこでも一定・電圧分割）",
+      parallel: "🔌 並列回路（電圧どこでも等しい・電流合流）",
+      short_current: "🚨 誤配線（電流計並列・ショート事故）",
+      series_volt: "⚠️ 誤配線（電圧計直列・電流遮断）"
+    }[circuitType];
+    ctx.fillText(typeLabel, 30, 42);
+
+    // 配置座標（器具が重ならないように縦配置を適正化）
+    const powerX = 65, powerY = 100;
+    const switchX = 65, switchY = bh - 75;
+    const ammeterX = bw / 2, ammeterY = bh - 75;
+    const resBaseX = bw / 2, resBaseY = 105;
+    const voltmeterX = bw / 2, voltmeterY = 230; // 電圧計を下に逃がす
+    const rightWireX = bw - 45;
+
+    // --- 導線の描画 ---
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = sim.isShort ? "#ef4444" : "#475569";
+
+    // 1. 電源(+) → 抵抗器エリア入口
+    drawWire(powerX + 25, powerY, resBaseX - 60, powerY);
+
+    // 2. 抵抗器エリア（回路タイプ別）
+    if (circuitType === 'single') {
+      drawWire(resBaseX - 60, powerY, resBaseX - 40, powerY);
+      drawResistorBox(resBaseX - 40, powerY - 20, 80, 40, "抵抗A", resA, "#38bdf8");
+      drawWire(resBaseX + 40, powerY, rightWireX, powerY);
+    } else if (circuitType === 'series') {
+      drawResistorBox(resBaseX - 85, powerY - 20, 70, 40, "RA", resA, "#38bdf8");
+      drawWire(resBaseX - 15, powerY, resBaseX + 15, powerY);
+      drawResistorBox(resBaseX + 15, powerY - 20, 70, 40, "RB", resB, "#f43f5e");
+      drawWire(resBaseX + 85, powerY, rightWireX, powerY);
+    } else if (circuitType === 'parallel') {
+      // 並列：上(RA) と 下(RB) にきれいに分岐・合流
+      const forkLX = resBaseX - 70;
+      const forkRX = resBaseX + 70;
+      const yA = powerY - 35;
+      const yB = powerY + 35;
+
+      // 左分岐
+      drawWire(resBaseX - 60, powerY, forkLX, powerY);
+      drawWire(forkLX, yA, forkLX, yB);
+      drawWire(forkLX, yA, resBaseX - 40, yA);
+      drawWire(forkLX, yB, resBaseX - 40, yB);
+
+      // 抵抗A・B
+      drawResistorBox(resBaseX - 40, yA - 20, 80, 40, "RA", resA, "#38bdf8");
+      drawResistorBox(resBaseX - 40, yB - 20, 80, 40, "RB", resB, "#f43f5e");
+
+      // 右合流（★RBの線も確実に右へ届くように修正！）
+      drawWire(resBaseX + 40, yA, forkRX, yA);
+      drawWire(resBaseX + 40, yB, forkRX, yB);
+      drawWire(forkRX, yA, forkRX, yB);
+      drawWire(forkRX, powerY, rightWireX, powerY);
+    } else if (circuitType === 'short_current') {
+      drawResistorBox(resBaseX - 40, powerY - 20, 80, 40, "抵抗A", resA, "#64748b");
+      ctx.strokeStyle = "#ef4444";
+      ctx.setLineDash([4, 3]);
+      drawWire(resBaseX - 60, powerY, resBaseX - 60, ammeterY);
+      drawWire(resBaseX - 60, ammeterY, ammeterX - 35, ammeterY);
+      ctx.setLineDash([]);
+      drawWire(resBaseX + 40, powerY, rightWireX, powerY);
+    } else if (circuitType === 'series_volt') {
+      drawResistorBox(resBaseX - 80, powerY - 20, 65, 40, "RA", resA, "#38bdf8");
+      drawWire(resBaseX - 15, powerY, resBaseX + 15, powerY);
+      drawMeterInstrument(resBaseX + 15, powerY - 25, 60, 50, "V", "電圧計(直列)", "#eab308", 0);
+      drawWire(resBaseX + 75, powerY, rightWireX, powerY);
+    }
+
+    // 3. 右側幹線 (下り)
+    drawWire(rightWireX, powerY, rightWireX, ammeterY);
+    drawWire(rightWireX, ammeterY, ammeterX + 35, ammeterY);
+
+    // 4. 電流計（下部中央・直列）
+    if (circuitType !== 'short_current') {
+      drawMeterInstrument(ammeterX - 30, ammeterY - 25, 60, 50, "A", "電流計(直列)", "#38bdf8", sim.totalI);
+    }
+    drawWire(ammeterX - 30, ammeterY, switchX + 25, switchY);
+
+    // 5. スイッチ & 電源
+    drawSwitchBox(switchX - 20, switchY - 15, 45, 30, isSwitchOn);
+    drawWire(switchX - 20, switchY, powerX, switchY);
+    drawWire(powerX, switchY, powerX, powerY + 45);
+    drawPowerSupply(powerX - 30, powerY - 25, 60, 70, volt, isSwitchOn);
+
+    // 6. 電圧計（並列配線・中段に独立配置して重なり解消）
+    if (circuitType !== 'series_volt') {
+      const vLX = resBaseX - 55;
+      const vRX = resBaseX + 55;
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.5)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      drawWire(vLX, powerY + (circuitType==='parallel'?40:20), vLX, voltmeterY);
+      drawWire(vLX, voltmeterY, voltmeterX - 30, voltmeterY);
+      drawWire(vRX, powerY + (circuitType==='parallel'?40:20), vRX, voltmeterY);
+      drawWire(vRX, voltmeterY, voltmeterX + 30, voltmeterY);
+      ctx.setLineDash([]);
+
+      drawMeterInstrument(voltmeterX - 30, voltmeterY - 25, 60, 50, "V", "電圧計(並列)", "#facc15", sim.circuitV);
+    }
+
+    // --- 電子の分岐流動シミュレーション ---
+    if (isSwitchOn && sim.totalI > 0.001) {
+      drawAccurateElectrons(bw, bh, sim, powerY, rightWireX, ammeterY, resBaseX);
+    }
+  }
+
+  function drawWire(x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  function drawResistorBox(x, y, w, h, label, ohm, color) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    // ギザギザ波形
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + h / 2);
+    ctx.lineTo(x + 18, y + h / 2 - 10);
+    ctx.lineTo(x + 30, y + h / 2 + 10);
+    ctx.lineTo(x + 42, y + h / 2 - 10);
+    ctx.lineTo(x + 54, y + h / 2 + 10);
+    ctx.lineTo(x + w - 6, y + h / 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`${label} (${ohm}Ω)`, x + w / 2, y + h + 14);
+  }
+
+  function drawPowerSupply(x, y, w, h, v, on) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = on ? "#38bdf8" : "#475569";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(x + 6, y + 8, w - 12, 22);
+    ctx.fillStyle = on ? "#facc15" : "#475569";
+    ctx.font = "bold 13px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(`${v.toFixed(1)} V`, x + w / 2, y + 24);
+
+    ctx.fillStyle = "#ef4444";
+    ctx.beginPath(); ctx.arc(x + w - 6, y + 25, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#64748b";
+    ctx.beginPath(); ctx.arc(x + 10, y + h - 5, 4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("電源装置", x + w / 2, y + h - 12);
+  }
+
+  function drawSwitchBox(x, y, w, h, on) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = on ? "#22c55e" : "#ef4444";
+    ctx.beginPath();
+    ctx.arc(x + 10, y + h / 2, 4, 0, Math.PI * 2);
+    ctx.arc(x + w - 10, y + h / 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y + h / 2);
+    if (on) ctx.lineTo(x + w - 10, y + h / 2);
+    else ctx.lineTo(x + w - 15, y + h / 2 - 14);
+    ctx.stroke();
+
+    ctx.fillStyle = on ? "#22c55e" : "#ef4444";
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(on ? "ON" : "OFF", x + w / 2, y + h + 12);
+  }
+
+  function drawMeterInstrument(x, y, w, h, symbol, name, color, value) {
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + h - 8, 20, Math.PI * 1.2, Math.PI * 1.8);
+    ctx.stroke();
+
+    const maxVal = symbol === 'A'
+      ? (currentRange === '5A' ? 5 : (currentRange === '500mA' ? 0.5 : 0.05))
+      : (voltRange === '300V' ? 300 : (voltRange === '15V' ? 15 : 3));
+    const ratio = Math.max(0, Math.min(1.15, value / maxVal));
+    const angle = Math.PI * 1.2 + (Math.PI * 0.6) * ratio;
+
+    ctx.strokeStyle = ratio > 1.02 ? "#ef4444" : "#f43f5e";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + h - 8);
+    ctx.lineTo(x + w / 2 + Math.cos(angle) * 22, y + h - 8 + Math.sin(angle) * 22);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(symbol, x + w / 2, y + 16);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(name, x + w / 2, y + h + 12);
+  }
+
+  // --- 分岐・合流に対応した電子アニメーション ---
+  function drawAccurateElectrons(bw, bh, sim, py, rx, ay, rBaseX) {
+    const speed = Math.min(6, Math.max(0.8, sim.totalI * 6));
+    ctx.fillStyle = "#38bdf8";
+
+    // 1. 共通幹線の電子
+    const mainCount = 14;
+    for (let i = 0; i < mainCount; i++) {
+      const prog = ((electronTick * speed + i * (500 / mainCount)) % 500) / 500;
+      let ex = 65, ey = py;
+
+      if (prog < 0.2) {
+        // 電源 → 分岐手前
+        ex = 90 + (prog / 0.2) * (rBaseX - 160);
+        ey = py;
+      } else if (prog < 0.5) {
+        // 合流後 → 右端 → 下り
+        const p = (prog - 0.2) / 0.3;
+        if (p < 0.4) {
+          ex = (rBaseX + 70) + (p / 0.4) * (rx - rBaseX - 70);
+          ey = py;
+        } else {
+          ex = rx;
+          ey = py + ((p - 0.4) / 0.6) * (ay - py);
+        }
+      } else if (prog < 0.8) {
+        // 下部ライン (電流計・スイッチ)
+        const p = (prog - 0.5) / 0.3;
+        ex = rx - p * (rx - 65);
+        ey = ay;
+      } else {
+        // 上り
+        const p = (prog - 0.8) / 0.2;
+        ex = 65;
+        ey = ay - p * (ay - py - 25);
+      }
+
+      ctx.beginPath(); ctx.arc(ex, ey, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 2. 並列回路の枝分かれ電子（AとBで個別に流す）
+    if (circuitType === 'parallel') {
+      const forkLX = rBaseX - 70;
+      const forkRX = rBaseX + 70;
+      const speedA = Math.min(5, Math.max(0.6, sim.iA * 6));
+      const speedB = Math.min(5, Math.max(0.6, sim.iB * 6));
+
+      // 抵抗Aルート (上)
+      for (let i = 0; i < 4; i++) {
+        const p = ((electronTick * speedA + i * 40) % 160) / 160;
+        let ex = forkLX, ey = py;
+        if (p < 0.25) {
+          ex = forkLX; ey = py - (p / 0.25) * 35;
+        } else if (p < 0.75) {
+          ex = forkLX + ((p - 0.25) / 0.5) * (forkRX - forkLX); ey = py - 35;
+        } else {
+          ex = forkRX; ey = (py - 35) + ((p - 0.75) / 0.25) * 35;
+        }
+        ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // 抵抗Bルート (下)
+      for (let i = 0; i < 4; i++) {
+        const p = ((electronTick * speedB + i * 40) % 160) / 160;
+        let ex = forkLX, ey = py;
+        if (p < 0.25) {
+          ex = forkLX; ey = py + (p / 0.25) * 35;
+        } else if (p < 0.75) {
+          ex = forkLX + ((p - 0.25) / 0.5) * (forkRX - forkLX); ey = py + 35;
+        } else {
+          ex = forkRX; ey = (py + 35) - ((p - 0.75) / 0.25) * 35;
+        }
+        ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // ========================================================
+  // B. 右上パネル：メーター目盛りの拡大
+  // ========================================================
+  function drawMeterDetailPanel(bx, by, bw, bh, sim) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // タブ
+    ctx.fillStyle = activeMeterTab === 'current' ? "#0f766e" : "#1e293b";
+    ctx.fillRect(bx, by, bw / 2 - 2, 22);
+    ctx.fillStyle = activeMeterTab === 'volt' ? "#0f766e" : "#1e293b";
+    ctx.fillRect(bx + bw / 2 + 2, by, bw / 2 - 2, 22);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("電流計の目盛", bx + bw / 4, by + 15);
+    ctx.fillText("電圧計の目盛", bx + (bw * 3) / 4, by + 15);
+
+    const isCur = activeMeterTab === 'current';
+    const curVal = isCur ? sim.totalI : sim.circuitV;
+    const rangeLabel = isCur ? currentRange : voltRange;
+
+    const arcCX = bx + bw / 2;
+    const arcCY = by + bh - 22;
+    const arcR = 85;
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(arcCX, arcCY, arcR, Math.PI * 1.25, Math.PI * 1.75);
+    ctx.stroke();
+
+    // 目盛り線
+    for (let i = 0; i <= 50; i++) {
+      const a = Math.PI * 1.25 + (Math.PI * 0.5) * (i / 50);
+      const isMajor = i % 10 === 0;
+      const isMid = i % 5 === 0;
+      const lineLen = isMajor ? 10 : (isMid ? 6 : 3);
+
+      const x1 = arcCX + Math.cos(a) * (arcR - lineLen);
+      const y1 = arcCY + Math.sin(a) * (arcR - lineLen);
+      const x2 = arcCX + Math.cos(a) * arcR;
+      const y2 = arcCY + Math.sin(a) * arcR;
+
+      ctx.strokeStyle = isMajor ? "#ffffff" : "#64748b";
+      ctx.lineWidth = isMajor ? 1.5 : 1;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+      if (isMajor) {
+        let numLabel = i / 10;
+        if (isCur) {
+          if (currentRange === '500mA') numLabel = (i / 10) * 100;
+          if (currentRange === '50mA') numLabel = (i / 10) * 10;
+        } else {
+          if (voltRange === '300V') numLabel = (i / 10) * 60;
+          if (voltRange === '15V') numLabel = (i / 10) * 3;
+          if (voltRange === '3V') numLabel = (i / 10) * 0.6;
+        }
+        const lx = arcCX + Math.cos(a) * (arcR - 18);
+        const ly = arcCY + Math.sin(a) * (arcR - 18);
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(numLabel.toString(), lx, ly + 3);
+      }
+    }
+
+    let maxScaleVal = 5.0;
+    if (isCur) {
+      maxScaleVal = currentRange === '5A' ? 5.0 : (currentRange === '500mA' ? 0.5 : 0.05);
+    } else {
+      maxScaleVal = voltRange === '300V' ? 300.0 : (voltRange === '15V' ? 15.0 : 3.0);
+    }
+
+    const needleRatio = Math.max(0, Math.min(1.15, curVal / maxScaleVal));
+    const needleAngle = Math.PI * 1.25 + (Math.PI * 0.5) * needleRatio;
+
+    ctx.strokeStyle = needleRatio > 1.02 ? "#ef4444" : "#f43f5e";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(arcCX, arcCY);
+    ctx.lineTo(arcCX + Math.cos(needleAngle) * (arcR + 4), arcCY + Math.sin(needleAngle) * (arcR + 4));
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.arc(arcCX, arcCY, 5, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = needleRatio > 1.02 ? "#ef4444" : "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    const readValText = isCur
+      ? (currentRange === '5A' ? curVal.toFixed(2) + " A" : (curVal * 1000).toFixed(1) + " mA")
+      : curVal.toFixed(2) + " V";
+    ctx.fillText(`【端子: ${rangeLabel}】 読値: ${readValText}`, bx + bw / 2, by + 40);
+  }
+
+  // ========================================================
+  // C. 右下パネル：V-I特性グラフ（上限を適応型に拡張）
+  // ========================================================
+  function drawGraphPanel(gx, gy, gw, gh, sim) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(gx, gy, gw, gh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(gx, gy, gw, gh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📈 電圧 - 電流 特性グラフ", gx + 10, gy + 16);
+
+    const plotX = gx + 40, plotY = gy + 32;
+    const plotW = gw - 54, plotH = gh - 55;
+
+    // 電流上限を判定（2.4Aなどの並列大電流に対応するため上限を最大3000mAに自動設定）
+    const maxI_mA = (circuitType === 'parallel' || sim.totalI > 0.6) ? 3000 : 600;
+
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.4)";
+    ctx.lineWidth = 1;
+
+    // 縦グリッド (電圧 0〜10V)
+    for (let v = 0; v <= 10; v += 2) {
+      const x = plotX + (v / 10) * plotW;
+      ctx.beginPath(); ctx.moveTo(x, plotY); ctx.lineTo(x, plotY + plotH); ctx.stroke();
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${v}`, x, plotY + plotH + 12);
+    }
+
+    // 横グリッド (電流)
+    const stepI = maxI_mA / 5;
+    for (let i = 0; i <= maxI_mA; i += stepI) {
+      const y = plotY + plotH - (i / maxI_mA) * plotH;
+      ctx.beginPath(); ctx.moveTo(plotX, y); ctx.lineTo(plotX + plotW, y); ctx.stroke();
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(i >= 1000 ? `${(i/1000).toFixed(1)}k` : `${Math.round(i)}`, plotX - 4, y + 3);
+    }
+
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("電圧 V (V)", plotX + plotW / 2, plotY + plotH + 20);
+    ctx.save();
+    ctx.translate(plotX - 25, plotY + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("電流 I (mA)", 0, 0);
+    ctx.restore();
+
+    // 比例直線（理論値）
+    if (sim.totalR > 0 && !sim.isShort && !sim.isBlocked) {
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(plotX, plotY + plotH);
+      const maxCurrentAt10V = (10.0 / sim.totalR) * 1000;
+      const endX = plotX + plotW;
+      const endY = plotY + plotH - (Math.min(maxI_mA, maxCurrentAt10V) / maxI_mA) * plotH;
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // プロット点
+    plotPoints.forEach(pt => {
+      const px = plotX + (pt.v / 10) * plotW;
+      const py = plotY + plotH - ((pt.i * 1000) / maxI_mA) * plotH;
+
+      if (px >= plotX && px <= plotX + plotW && py >= plotY && py <= plotY + plotH) {
+        ctx.fillStyle = "#facc15";
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#000000"; ctx.lineWidth = 1; ctx.stroke();
+      }
+    });
+
+    // 現在の測定点（赤丸）
+    if (isSwitchOn && !sim.isShort && !sim.isBlocked) {
+      const curPlotX = plotX + (sim.circuitV / 10) * plotW;
+      const curPlotY = plotY + plotH - ((sim.totalI * 1000) / maxI_mA) * plotH;
+      if (curPlotX <= plotX + plotW && curPlotY >= plotY && curPlotY <= plotY + plotH) {
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(curPlotX, curPlotY, 5, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      canvas.onmousedown = null;
+    }
+  };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================================
+// 【レイアウト完全調整版】唾液によるデンプン消化 (中2・生命)
+// ===================================================================
+function initC2Digestion(canvas) {
+  const ctx = canvas.getContext('2d');
+
+  // --- 実験状態 ---
+  let tempSetting = 37;           // 保温温度: 5, 37, 80 (℃)
+  let testReagent = "none";       // 'none', 'iodine', 'benedict'
+  let isHeatedBenedict = false;   // ベネジクト液加熱済みか
+  let selectedTube = "A";         // 選択中の試験管: 'A', 'B', 'C', 'D'
+  let digestionTick = 0;
+  let animId;
+
+  // 実写写真の読み込み
+  const labImages = {
+    iodine_pos: new Image(),
+    iodine_neg: new Image(),
+    benedict_pos: new Image(),
+    benedict_neg: new Image(),
+    danger_bumping: new Image(),
+    starch_grains: new Image()
+  };
+  labImages.iodine_pos.src = 'test_iodine_positive.jpg';
+  labImages.iodine_neg.src = 'test_iodine_negative.jpg';
+  labImages.benedict_pos.src = 'test_benedict_positive.jpg';
+  labImages.benedict_neg.src = 'test_benedict_negative.jpg';
+  labImages.danger_bumping.src = 'danger_bumping.jpg';
+  labImages.starch_grains.src = 'starch_grains.jpg';
+
+  // 4本の試験管データ定義
+  const tubes = {
+    A: { name: "A: デンプン＋だ液", starch: true, saliva: true, boiledSaliva: false, label: "デンプン+唾液" },
+    B: { name: "B: デンプン＋水", starch: true, saliva: false, boiledSaliva: false, label: "デンプン+水" },
+    C: { name: "C: デンプン＋沸騰だ液", starch: true, saliva: false, boiledSaliva: true, label: "デンプン+沸騰唾液" },
+    D: { name: "D: 水＋だ液", starch: false, saliva: true, boiledSaliva: false, label: "水+唾液" }
+  };
+
+  const controls = document.getElementById('labControlsArea');
+
+  function renderControls() {
+    controls.innerHTML = `
+      <div class="ctrl-group">
+        <label>1. 試験管の保温温度（湯浴）:</label>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+          <button class="btn-action ${tempSetting===5?'':'secondary'}" id="bTemp5" style="padding:8px 4px; font-size:12px;">氷水 (5℃)</button>
+          <button class="btn-action ${tempSetting===37?'':'secondary'}" id="bTemp37" style="${tempSetting===37?'background:#0d9488; border-color:#0d9488;':''} padding:8px 4px; font-size:12px;">約37℃ (適温)♨️</button>
+          <button class="btn-action ${tempSetting===80?'':'secondary'}" id="bTemp80" style="padding:8px 4px; font-size:12px;">熱湯 (80℃)</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>2. 指示薬（検出試薬）の操作:</label>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+          <button class="btn-action ${testReagent==='iodine'?'':'secondary'}" id="bIodine" style="padding:8px 4px; font-size:12px;">ヨウ素液 💧</button>
+          <button class="btn-action ${testReagent==='benedict'&&!isHeatedBenedict?'':'secondary'}" id="bBenedict" style="padding:8px 4px; font-size:12px;">ベネジクト液 🧪</button>
+          <button class="btn-action ${isHeatedBenedict?'':'secondary'}" id="bHeatBenedict" style="${isHeatedBenedict?'background:#ea580c; border-color:#ea580c;':''} padding:8px 4px; font-size:12px;">加熱沸騰 🔥</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>3. 注目する試験管:</label>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;">
+          <button class="btn-action ${selectedTube==='A'?'':'secondary'}" id="tA" style="padding:8px 2px; font-size:12px;">A (唾液)</button>
+          <button class="btn-action ${selectedTube==='B'?'':'secondary'}" id="tB" style="padding:8px 2px; font-size:12px;">B (水)</button>
+          <button class="btn-action ${selectedTube==='C'?'':'secondary'}" id="tC" style="padding:8px 2px; font-size:12px;">C (沸騰)</button>
+          <button class="btn-action ${selectedTube==='D'?'':'secondary'}" id="tD" style="padding:8px 2px; font-size:12px;">D (水+唾)</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; gap:8px;">
+        <button class="btn-action secondary" id="bDangerBumping" style="flex:2; color:#ef4444; border-color:#ef4444; font-size:13px;">
+          ⚠️ 危険操作体験: 沸騰石なしで急加熱（突沸警告）
+        </button>
+        <button class="btn-action secondary" id="bResetDigestion" style="flex:1; font-size:13px;">
+          試験管を洗う（リセット） 🔄
+        </button>
+      </div>
+    `;
+
+    document.getElementById('bTemp5').onclick = () => { tempSetting = 5; updateStatus(); };
+    document.getElementById('bTemp37').onclick = () => { tempSetting = 37; updateStatus(); };
+    document.getElementById('bTemp80').onclick = () => { tempSetting = 80; updateStatus(); };
+
+    document.getElementById('bIodine').onclick = () => {
+      testReagent = 'iodine';
+      isHeatedBenedict = false;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bBenedict').onclick = () => {
+      testReagent = 'benedict';
+      isHeatedBenedict = false;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('bHeatBenedict').onclick = () => {
+      if (testReagent !== 'benedict') {
+        setStatus("先に「ベネジクト液」を注いでから加熱してください。", true);
+        return;
+      }
+      isHeatedBenedict = true;
+      renderControls();
+      updateStatus();
+    };
+
+    document.getElementById('tA').onclick = () => { selectedTube = 'A'; renderControls(); updateStatus(); };
+    document.getElementById('tB').onclick = () => { selectedTube = 'B'; renderControls(); updateStatus(); };
+    document.getElementById('tC').onclick = () => { selectedTube = 'C'; renderControls(); updateStatus(); };
+    document.getElementById('tD').onclick = () => { selectedTube = 'D'; renderControls(); updateStatus(); };
+
+    document.getElementById('bDangerBumping').onclick = showBumpingModal;
+    document.getElementById('bResetDigestion').onclick = resetLab;
+  }
+
+  function showBumpingModal() {
+    setStatus("【突沸（とっぷつ）事故警告！】沸騰石を入れずに試験管の底だけを急加熱すると、液体が突発的に激しく噴き出します！", true);
+
+    let modal = document.getElementById('bumpingWarningModal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'bumpingWarningModal';
+    modal.style.position = 'fixed';
+    modal.style.top = '0';
+    modal.style.left = '0';
+    modal.style.width = '100vw';
+    modal.style.height = '100vh';
+    modal.style.backgroundColor = 'rgba(0, 0, 0, 0.88)';
+    modal.style.zIndex = '9999';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    modal.style.justifyContent = 'center';
+    modal.style.alignItems = 'center';
+    modal.style.padding = '20px';
+    modal.style.cursor = 'pointer';
+
+    const card = document.createElement('div');
+    card.style.background = '#0f172a';
+    card.style.border = '2px solid #ef4444';
+    card.style.borderRadius = '14px';
+    card.style.maxWidth = '580px';
+    card.style.width = '90%';
+    card.style.padding = '22px';
+    card.style.boxShadow = '0 0 35px rgba(239, 68, 68, 0.6)';
+    card.style.textAlign = 'center';
+    card.style.color = '#ffffff';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = '🚨 【極めて危険】ベネジクト液加熱時の突沸（とっぷつ）';
+    h2.style.color = '#ef4444';
+    h2.style.fontSize = '18px';
+    h2.style.marginBottom = '12px';
+    card.appendChild(h2);
+
+    if (labImages.danger_bumping.complete && labImages.danger_bumping.naturalWidth !== 0) {
+      const img = document.createElement('img');
+      img.src = labImages.danger_bumping.src;
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '230px';
+      img.style.borderRadius = '8px';
+      img.style.marginBottom = '12px';
+      card.appendChild(img);
+    }
+
+    const desc = document.createElement('div');
+    desc.style.fontSize = '13px';
+    desc.style.lineHeight = '1.7';
+    desc.style.textAlign = 'left';
+    desc.style.background = '#1e293b';
+    desc.style.padding = '14px';
+    desc.style.borderRadius = '8px';
+    desc.style.color = '#f1f5f9';
+    desc.innerHTML = `
+      <strong style="color:#facc15;">★ なぜ危険か？</strong><br>
+      液体を急激に熱すると、沸点を超えても沸騰せず（過熱状態）、突然爆発するように激しく沸騰して熱湯が噴き出します（突沸）。目や皮膚に入ると重大な火傷を負います。<br><br>
+      <strong style="color:#38bdf8;">★ 教科書の3大安全ルール（テスト必出）：</strong><br>
+      ① <strong>沸騰石</strong>を必ず1〜2粒入れて加熱する。<br>
+      ② 試験管の口を<strong>絶対に自分や人へ向けない</strong>。<br>
+      ③ 底だけを熱さず、<strong>液面付近を小刻みに振りながら</strong>均一に温める。
+    `;
+    card.appendChild(desc);
+
+    const tip = document.createElement('p');
+    tip.textContent = 'クリックすると閉じて実験に戻ります';
+    tip.style.fontSize = '12px';
+    tip.style.color = '#94a3b8';
+    tip.style.marginTop = '12px';
+    card.appendChild(tip);
+
+    modal.appendChild(card);
+    modal.onclick = () => modal.remove();
+    document.body.appendChild(modal);
+  }
+
+  function resetLab() {
+    testReagent = "none";
+    isHeatedBenedict = false;
+    tempSetting = 37;
+    selectedTube = "A";
+    const modal = document.getElementById('bumpingWarningModal');
+    if (modal) modal.remove();
+    renderControls();
+    updateStatus();
+  }
+
+  function isDigested(tKey) {
+    if (tKey !== 'A') return false;
+    return tempSetting === 37;
+  }
+
+  function updateStatus() {
+    const digested = isDigested(selectedTube);
+
+    if (testReagent === 'none') {
+      let tempDesc = tempSetting === 37 ? "体温付近（約37℃・酵素アミラーゼが最も働く最適温度）" : (tempSetting === 5 ? "氷水（5℃・温度が低すぎて酵素が働かない）" : "熱湯（80℃・高温のため酵素タンパク質が変性・失活）");
+      setStatus(`【保温中: ${tempSetting}℃】${tempDesc}。試薬を選んで反応を確かめましょう。`);
+      return;
+    }
+
+    if (testReagent === 'iodine') {
+      if (selectedTube === 'A') {
+        if (digested) {
+          setStatus("【試験管A: デンプン＋だ液 (37℃)】だ液アミラーゼによってデンプンが完全に分解されたため、ヨウ素反応は起こらず『うすい黄褐色』のままです！");
+        } else {
+          setStatus(`【試験管A: デンプン＋だ液 (${tempSetting}℃)】温度条件が不適切なためデンプンが分解されず残り、『青紫色』に変色しました！`);
+        }
+      } else if (selectedTube === 'B') {
+        setStatus("【試験管B: デンプン＋水】だ液が入っていないためデンプンが残り、鮮やかな『青紫色』に変色しました！（対照実験：だ液が分解を起こすことの証明）");
+      } else if (selectedTube === 'C') {
+        setStatus("【試験管C: デンプン＋沸騰だ液】だ液を熱して酵素が熱変性（失活）したため、デンプンが分解できず『青紫色』に変色しました！");
+      } else if (selectedTube === 'D') {
+        setStatus("【試験管D: 水＋だ液】もともとデンプンが含まれていないため、反応せず『うすい黄褐色』のままです。");
+      }
+    } else if (testReagent === 'benedict') {
+      if (!isHeatedBenedict) {
+        setStatus("【ベネジクト液滴下】入れただけでは反応しません（青色のまま）。「加熱沸騰」ボタンを押してください！", true);
+        return;
+      }
+      if (selectedTube === 'A') {
+        if (digested) {
+          setStatus("【試験管A: デンプン＋だ液＋加熱】デンプンが分解されて麦芽糖（糖）が生じたため、加熱によって『赤褐色（レンガ色）の沈殿』が生じました！");
+        } else {
+          setStatus(`【試験管A: デンプン＋だ液 (${tempSetting}℃)】デンプンが分解されず糖が生じなかったため、加熱しても青色のままで沈殿は出ません。`);
+        }
+      } else if (selectedTube === 'B') {
+        setStatus("【試験管B: デンプン＋水＋加熱】糖が存在しないため、加熱しても青色透明のままで変化しません。");
+      } else if (selectedTube === 'C') {
+        setStatus("【試験管C: 沸騰だ液＋加熱】酵素が失活して糖が生成されなかったため、青色透明のまま変化しません。");
+      } else if (selectedTube === 'D') {
+        setStatus("【試験管D: 水＋だ液＋加熱】だ液そのものには糖が含まれていないため、青色透明のまま変化しません。（対照実験：だ液由来の糖ではないことの証明）");
+      }
+    }
+  }
+
+  renderControls();
+  updateStatus();
+
+  // ========================================================
+  // メイン描画ループ
+  // ========================================================
+  function render() {
+    digestionTick += 0.05;
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = "#030712";
+    ctx.fillRect(0, 0, w, h);
+
+    const leftW = w - 240;
+
+    // 1. メイン実験ラック（左側）
+    drawLabRack(leftW, h);
+
+    // 2. 右側パネル（実写写真枠 & 対照実験チェック表）
+    const rightX = w - 230, rightW = 215;
+    drawPhotoPreviewBox(rightX, 15, rightW, 140);
+    drawComparisonTable(rightX, 165, rightW, h - 180);
+
+    animId = requestAnimationFrame(render);
+  }
+  render();
+
+  // ========================================================
+  // A. メイン実験ラック（試験管の配置とミクロ枠の高さを最適化）
+  // ========================================================
+  function drawLabRack(bw, bh) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15, 15, bw - 20, bh - 30);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, bw - 20, bh - 30);
+
+    // 見出し
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🧪 唾液によるデンプン消化実験（4本対照実験）", 28, 38);
+
+    // 保温水槽ビーカー
+    const beakerX = 35, beakerY = 110, beakerW = bw - 60, beakerH = 150;
+    const waterColor = tempSetting === 37 ? "rgba(13, 148, 136, 0.22)" : (tempSetting === 5 ? "rgba(56, 189, 248, 0.18)" : "rgba(239, 68, 68, 0.22)");
+    ctx.fillStyle = waterColor;
+    ctx.fillRect(beakerX, beakerY, beakerW, beakerH);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(beakerX, beakerY, beakerW, beakerH);
+
+    // 温度計
+    ctx.fillStyle = "#e2e8f0";
+    ctx.fillRect(beakerX + 12, beakerY - 35, 6, beakerH + 25);
+    ctx.fillStyle = "#ef4444";
+    const thH = (tempSetting / 100) * 80;
+    ctx.fillRect(beakerX + 12, beakerY + beakerH - 10 - thH, 6, thH);
+    ctx.beginPath();
+    ctx.arc(beakerX + 15, beakerY + beakerH - 5, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(`水温: ${tempSetting}℃`, beakerX + 26, beakerY - 15);
+
+    // 4本の試験管を描画（間隔を広く確保）
+    const tKeys = ['A', 'B', 'C', 'D'];
+    const tubeW = 38, tubeH = 160;
+    const usableW = beakerW - 80;
+    const spacing = usableW / 4;
+
+    tKeys.forEach((key, idx) => {
+      const tx = beakerX + 55 + idx * spacing;
+      const ty = 65; // 上部マージン
+      const isCur = (selectedTube === key);
+      drawSingleTestTube(tx, ty, tubeW, tubeH, key, tubes[key], isCur);
+    });
+
+    // 下部：ミクロ分解モデル（被らないように一番下に配置）
+    const microY = bh - 75;
+    const microH = 50;
+    drawMicroMoleculeBox(35, microY, beakerW, microH);
+  }
+
+  function drawSingleTestTube(tx, ty, tw, th, key, info, isSelected) {
+    // 選択ハイライト
+    if (isSelected) {
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(tx - 6, ty - 18, tw + 12, th + 36);
+      ctx.setLineDash([]);
+    }
+
+    // 上部ラベル（重ならないようコンパクトに2行で描画）
+    ctx.fillStyle = isSelected ? "#facc15" : "#cbd5e1";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`管${key}`, tx + tw / 2, ty - 22);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "9px sans-serif";
+    ctx.fillText(info.label, tx + tw / 2, ty - 8);
+
+    // 液体の色
+    let liquidColor = "rgba(226, 232, 240, 0.4)";
+    let hasPrecipitate = false;
+    const digested = isDigested(key);
+
+    if (testReagent === 'iodine') {
+      if (key === 'A') {
+        liquidColor = digested ? "#fef08a" : "#1e1b4b";
+      } else if (key === 'B' || key === 'C') {
+        liquidColor = "#1e1b4b";
+      } else {
+        liquidColor = "#fef08a";
+      }
+    } else if (testReagent === 'benedict') {
+      if (!isHeatedBenedict) {
+        liquidColor = "rgba(14, 165, 233, 0.65)";
+      } else {
+        if (key === 'A' && digested) {
+          liquidColor = "#b45309";
+          hasPrecipitate = true;
+        } else {
+          liquidColor = "rgba(14, 165, 233, 0.65)";
+        }
+      }
+    }
+
+    // 液面
+    ctx.fillStyle = liquidColor;
+    const liquidTop = ty + th * 0.45;
+    ctx.beginPath();
+    ctx.moveTo(tx + 2, liquidTop);
+    ctx.lineTo(tx + 2, ty + th - 10);
+    ctx.arc(tx + tw / 2, ty + th - 10, tw / 2 - 2, Math.PI, 0, true);
+    ctx.lineTo(tx + tw - 2, liquidTop);
+    ctx.closePath();
+    ctx.fill();
+
+    // 沈殿
+    if (hasPrecipitate) {
+      ctx.fillStyle = "#78350f";
+      ctx.beginPath();
+      ctx.arc(tx + tw / 2, ty + th - 8, tw / 2 - 3, 0, Math.PI);
+      ctx.fill();
+    }
+
+    // ガラス外枠
+    ctx.strokeStyle = isSelected ? "#38bdf8" : "#94a3b8";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx, ty + th - 10);
+    ctx.arc(tx + tw / 2, ty + th - 10, tw / 2, Math.PI, 0, true);
+    ctx.lineTo(tx + tw, ty);
+    ctx.stroke();
+
+    ctx.strokeRect(tx - 2, ty - 2, tw + 4, 4);
+
+    // 下部ラベル
+    ctx.fillStyle = isSelected ? "#facc15" : "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`試験管${key}`, tx + tw / 2, ty + th + 14);
+  }
+
+  function drawMicroMoleculeBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🔬 消化のミクロモデル", bx + 8, by + 14);
+
+    const cy = by + bh / 2 + 6;
+    const digested = isDigested(selectedTube);
+
+    if (digested) {
+      ctx.fillStyle = "#facc15";
+      for (let i = 0; i < 5; i++) {
+        const mx = bx + 40 + i * 42 + Math.sin(digestionTick + i) * 2;
+        ctx.beginPath();
+        ctx.arc(mx, cy - 2, 4, 0, Math.PI * 2);
+        ctx.arc(mx + 7, cy + 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#22c55e";
+      ctx.font = "9px sans-serif";
+      ctx.fillText("麦芽糖（二糖類）へ切断完了！", bx + bw - 145, by + 14);
+    } else {
+      ctx.fillStyle = "#38bdf8";
+      for (let i = 0; i < 12; i++) {
+        const mx = bx + 40 + i * 13;
+        const my = cy + Math.sin(i * 0.8) * 3;
+        ctx.beginPath();
+        ctx.arc(mx, my, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // ハサミ
+      ctx.strokeStyle = "#f43f5e";
+      ctx.lineWidth = 1.8;
+      const hx = bx + 120 + Math.sin(digestionTick * 2) * 10;
+      ctx.beginPath();
+      ctx.moveTo(hx - 6, cy - 12); ctx.lineTo(hx, cy - 2); ctx.lineTo(hx + 6, cy - 12);
+      ctx.moveTo(hx - 6, cy); ctx.lineTo(hx + 6, cy);
+      ctx.stroke();
+
+      ctx.fillStyle = "#f43f5e";
+      ctx.font = "9px sans-serif";
+      ctx.fillText("アミラーゼが鎖を切断中…", bx + bw - 125, by + 14);
+    }
+  }
+
+  // ========================================================
+  // B. 右上パネル：実写写真枠
+  // ========================================================
+  function drawPhotoPreviewBox(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📷 実写写真: 試験管の呈色", bx + 8, by + 16);
+
+    const digested = isDigested(selectedTube);
+    let targetImg = null;
+    let label = "試薬未投入";
+
+    if (testReagent === 'iodine') {
+      if (selectedTube === 'A') {
+        targetImg = digested ? labImages.iodine_neg : labImages.iodine_pos;
+        label = digested ? "ヨウ素陰性（黄褐色）" : "ヨウ素陽性（青紫色）";
+      } else if (selectedTube === 'B' || selectedTube === 'C') {
+        targetImg = labImages.iodine_pos;
+        label = "ヨウ素陽性（青紫色）";
+      } else {
+        targetImg = labImages.iodine_neg;
+        label = "ヨウ素陰性（黄褐色）";
+      }
+    } else if (testReagent === 'benedict') {
+      if (!isHeatedBenedict) {
+        targetImg = labImages.benedict_neg;
+        label = "ベネジクト（加熱前・青）";
+      } else {
+        if (selectedTube === 'A' && digested) {
+          targetImg = labImages.benedict_pos;
+          label = "ベネジクト陽性（赤褐色沈殿）";
+        } else {
+          targetImg = labImages.benedict_neg;
+          label = "ベネジクト陰性（青色不変）";
+        }
+      }
+    } else {
+      targetImg = labImages.starch_grains;
+      label = "デンプン粒の顕微鏡観察";
+    }
+
+    if (targetImg && targetImg.complete && targetImg.naturalWidth !== 0) {
+      ctx.drawImage(targetImg, bx + 8, by + 24, bw - 16, bh - 32);
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(bx + 8, by + 24, bw - 16, bh - 32);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("写真読み込み待機中...", bx + bw / 2, by + bh / 2 + 5);
+    }
+
+    ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+    ctx.fillRect(bx + 8, by + bh - 20, bw - 16, 16);
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, bx + bw / 2, by + bh - 8);
+  }
+
+  // ========================================================
+  // C. 右下パネル：対照実験マトリクスチェック表
+  // ========================================================
+  function drawComparisonTable(bx, by, bw, bh) {
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    ctx.fillStyle = "#facc15";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("📋 対照実験の結果（入試必出）", bx + 8, by + 16);
+
+    const rows = [
+      { key: "A", name: "デンプン+だ液", iodine: "✕ (黄褐)", benedict: "◯ (赤褐)" },
+      { key: "B", name: "デンプン+水",   iodine: "◯ (青紫)", benedict: "✕ (青色)" },
+      { key: "C", name: "デンプン+沸騰", iodine: "◯ (青紫)", benedict: "✕ (青色)" },
+      { key: "D", name: "水+だ液",       iodine: "✕ (黄褐)", benedict: "✕ (青色)" }
+    ];
+
+    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#94a3b8";
+    ctx.fillText("試験管", bx + 8, by + 34);
+    ctx.fillText("ヨウ素", bx + 95, by + 34);
+    ctx.fillText("ベネジクト", bx + 150, by + 34);
+
+    rows.forEach((r, idx) => {
+      const iy = by + 50 + idx * 24;
+      const isCur = (selectedTube === r.key);
+
+      if (isCur) {
+        ctx.fillStyle = "rgba(56, 189, 248, 0.18)";
+        ctx.fillRect(bx + 4, iy - 12, bw - 8, 20);
+      }
+
+      ctx.fillStyle = isCur ? "#facc15" : "#cbd5e1";
+      ctx.textAlign = "left";
+      ctx.fillText(`${r.key}: ${r.name}`, bx + 8, iy + 2);
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = (testReagent === 'iodine' || testReagent === 'benedict') ? (r.iodine.startsWith('◯') ? "#38bdf8" : "#cbd5e1") : "#475569";
+      ctx.fillText(testReagent !== 'none' ? r.iodine : "―", bx + 115, iy + 2);
+
+      ctx.fillStyle = (testReagent === 'benedict' && isHeatedBenedict) ? (r.benedict.startsWith('◯') ? "#f43f5e" : "#cbd5e1") : "#475569";
+      ctx.fillText((testReagent === 'benedict' && isHeatedBenedict) ? r.benedict : "―", bx + 180, iy + 2);
+    });
+
+    const footY = by + bh - 40;
+    ctx.fillStyle = "#1e293b";
+    ctx.fillRect(bx + 6, footY, bw - 12, 34);
+    ctx.fillStyle = "#5eead4";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("【結論】だ液のアミラーゼは", bx + 10, footY + 13);
+    ctx.fillText("デンプンを麦芽糖(糖)へと分解する。", bx + 10, footY + 27);
+  }
+
+  return {
+    destroy: () => {
+      cancelAnimationFrame(animId);
+      const modal = document.getElementById('bumpingWarningModal');
+      if (modal) modal.remove();
+    }
+  };
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // 雲のでき方 (中2・地球)
 function initC2Cloud(canvas) {
