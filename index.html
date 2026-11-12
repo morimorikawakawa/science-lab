@@ -11389,180 +11389,255 @@ function initC3Motion(canvas) {
 
 
 
-
 // ===================================================================
-// 【満ち欠け幾何学＆グリッドUI完全修正版】月の満ち欠け (中3・地球)
+// 【教科書・正解図完全準拠版】月の満ち欠けと天体の位置関係 (中3・地球)
 // ===================================================================
 function initC3Moon(canvas) {
   const ctx = canvas.getContext('2d');
 
   // --- 実験パラメータ ---
-  let moonAngle = 90;           // 月の公転角度 (度: 0:新月, 90:上弦, 180:満月, 270:下弦)
-  let observerTime = 18;        // 観測者の時刻 (12:昼, 18:夕方, 0:真夜中, 6:明け方)
-  let isAutoOrbit = false;      // 自動公転
-  let eclipseMode = 'none';     // 'none', 'solar', 'lunar'
+  let moonAngle = 90;             // 現在の月の角度 (0°〜360°)
+  let targetMoonAngle = null;     // 目標角度（ボタンクリック時のスムーズ移動用）
+  let observerTime = 18;          // 観測時刻 (12:昼, 18:夕方, 0:真夜中, 6:明け方)
+  let isAutoOrbit = false;        // 自動公転
+  let eclipseMode = 'none';       // 'none', 'solar', 'lunar'
   let animId;
-  let tick = 0;
 
   const controls = document.getElementById('labControlsArea');
 
-  function renderControls() {
+  // 初回のみコントロールのHTMLを構築（スライダー操作が途切れないようにするため）
+  function initControls() {
     controls.innerHTML = `
       <div class="ctrl-group" style="grid-column: 1 / -1;">
         <label>1. 代表的な月の形（月相）へジャンプ:</label>
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap:6px;">
-          <button class="btn-action ${Math.abs(moonAngle-0)<5?'':'secondary'}" id="pNew" style="padding:6px; font-size:11px;">新月 (0°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-45)<5?'':'secondary'}" id="pCres" style="padding:6px; font-size:11px;">三日月 (45°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-90)<5?'':'secondary'}" id="pFirst" style="${Math.abs(moonAngle-90)<5?'background:#0d9488; border-color:#0d9488;':''} padding:6px; font-size:11px;">上弦の月 (90°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-135)<5?'':'secondary'}" id="pGibbous" style="padding:6px; font-size:11px;">上弦〜満月 (135°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-180)<5?'':'secondary'}" id="pFull" style="${Math.abs(moonAngle-180)<5?'background:#eab308; border-color:#eab308; color:#000;':''} padding:6px; font-size:11px;">満月 (180°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-270)<5?'':'secondary'}" id="pThird" style="${Math.abs(moonAngle-270)<5?'background:#0d9488; border-color:#0d9488;':''} padding:6px; font-size:11px;">下弦の月 (270°)</button>
-          <button class="btn-action ${Math.abs(moonAngle-315)<5?'':'secondary'}" id="pLate" style="padding:6px; font-size:11px;">有明月 (315°)</button>
+        <div id="phaseBtns" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap:6px;">
+          <button class="btn-action secondary" data-deg="0" style="padding:6px; font-size:11px;">新月 (0°)</button>
+          <button class="btn-action secondary" data-deg="45" style="padding:6px; font-size:11px;">三日月 (45°)</button>
+          <button class="btn-action secondary" data-deg="90" style="padding:6px; font-size:11px;">上弦 (90°)</button>
+          <button class="btn-action secondary" data-deg="135" style="padding:6px; font-size:11px;">上弦〜満月 (135°)</button>
+          <button class="btn-action secondary" data-deg="180" style="padding:6px; font-size:11px;">満月 (180°)</button>
+          <button class="btn-action secondary" data-deg="225" style="padding:6px; font-size:11px;">満月〜下弦 (225°)</button>
+          <button class="btn-action secondary" data-deg="270" style="padding:6px; font-size:11px;">下弦 (270°)</button>
+          <button class="btn-action secondary" data-deg="315" style="padding:6px; font-size:11px;">有明月 (315°)</button>
         </div>
       </div>
 
       <div class="ctrl-group">
-        <label>2. 月の公転位置: <span id="mDegVal" class="ctrl-val">${Math.round(moonAngle)}°</span></label>
-        <input type="range" id="mRange" min="0" max="360" value="${Math.round(moonAngle)}">
+        <label>2. 月の公転位置: <span id="mDegVal" class="ctrl-val">90°</span></label>
+        <input type="range" id="mRange" min="0" max="360" step="1" value="90" style="width:100%; cursor:pointer;">
       </div>
 
       <div class="ctrl-group">
         <label>3. 地上の観測時刻（地球の自転）:</label>
-        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px;">
-          <button class="btn-action ${observerTime===12?'':'secondary'}" id="t12" style="padding:6px 2px; font-size:11px;">昼(12時)</button>
-          <button class="btn-action ${observerTime===18?'':'secondary'}" id="t18" style="${observerTime===18?'background:#ea580c; border-color:#ea580c;':''} padding:6px 2px; font-size:11px;">夕方(18時)</button>
-          <button class="btn-action ${observerTime===0?'':'secondary'}" id="t0" style="${observerTime===0?'background:#1e1b4b; border-color:#818cf8;':''} padding:6px 2px; font-size:11px;">夜中(0時)</button>
-          <button class="btn-action ${observerTime===6?'':'secondary'}" id="t6" style="${observerTime===6?'background:#0284c7; border-color:#0284c7;':''} padding:6px 2px; font-size:11px;">明方(6時)</button>
+        <div id="timeBtns" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px;">
+          <button class="btn-action secondary" data-time="12" style="padding:6px 2px; font-size:11px;">昼(12時)</button>
+          <button class="btn-action secondary" data-time="18" style="padding:6px 2px; font-size:11px;">夕方(18時)</button>
+          <button class="btn-action secondary" data-time="0" style="padding:6px 2px; font-size:11px;">真夜中(0時)</button>
+          <button class="btn-action secondary" data-time="6" style="padding:6px 2px; font-size:11px;">明け方(6時)</button>
         </div>
       </div>
 
       <div class="ctrl-group" style="grid-column: 1 / -1; display:flex; flex-wrap:wrap; gap:8px;">
-        <button class="btn-action ${isAutoOrbit?'secondary':''}" id="bAutoOrbit" style="flex:1.2; ${!isAutoOrbit?'background:#10b981; border-color:#10b981;':''}">
-          ${isAutoOrbit ? '公転停止 ⏸️' : '公転アニメーション再生 ▶️'}
-        </button>
-        <button class="btn-action ${eclipseMode==='solar'?'':'secondary'}" id="bSolar" style="flex:1; ${eclipseMode==='solar'?'background:#ef4444; border-color:#ef4444;':''}">
-          日食モード 🌑
-        </button>
-        <button class="btn-action ${eclipseMode==='lunar'?'':'secondary'}" id="bLunar" style="flex:1; ${eclipseMode==='lunar'?'background:#b91c1c; border-color:#b91c1c;':''}">
-          月食モード 🌕
-        </button>
-        <button class="btn-action secondary" id="bResetMoon" style="flex:1;">
-          リセット 🔄
-        </button>
+        <button class="btn-action" id="bAutoOrbit" style="flex:1.2;">公転アニメーション再生 ▶️</button>
+        <button class="btn-action secondary" id="bSolar" style="flex:1;">日食モード 🌑</button>
+        <button class="btn-action secondary" id="bLunar" style="flex:1;">月食モード 🌕</button>
+        <button class="btn-action secondary" id="bResetMoon" style="flex:1;">リセット 🔄</button>
       </div>
     `;
 
-    document.getElementById('mRange').oninput = (e) => {
-      moonAngle = parseInt(e.target.value);
-      document.getElementById('mDegVal').textContent = `${Math.round(moonAngle)}°`;
+    // スライダー操作（DOMを再構築せず値だけ即座に反映）
+    const mRange = document.getElementById('mRange');
+    mRange.addEventListener('input', (e) => {
+      targetMoonAngle = null; // スライダー操作時は目標移動をキャンセル
+      isAutoOrbit = false;
       eclipseMode = 'none';
+      moonAngle = parseFloat(e.target.value);
+      syncControlUI();
       updateStatus();
-    };
+    });
 
-    document.getElementById('pNew').onclick = () => setPhase(0);
-    document.getElementById('pCres').onclick = () => setPhase(45);
-    document.getElementById('pFirst').onclick = () => setPhase(90);
-    document.getElementById('pGibbous').onclick = () => setPhase(135);
-    document.getElementById('pFull').onclick = () => setPhase(180);
-    document.getElementById('pThird').onclick = () => setPhase(270);
-    document.getElementById('pLate').onclick = () => setPhase(315);
+    // 月相ジャンプボタン（スムーズに目標角度へ移動）
+    document.querySelectorAll('#phaseBtns button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const deg = parseInt(btn.dataset.deg, 10);
+        setPhaseSmooth(deg);
+      });
+    });
 
-    document.getElementById('t12').onclick = () => { observerTime = 12; renderControls(); updateStatus(); };
-    document.getElementById('t18').onclick = () => { observerTime = 18; renderControls(); updateStatus(); };
-    document.getElementById('t0').onclick = () => { observerTime = 0; renderControls(); updateStatus(); };
-    document.getElementById('t6').onclick = () => { observerTime = 6; renderControls(); updateStatus(); };
+    // 観測時刻ボタン
+    document.querySelectorAll('#timeBtns button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        observerTime = parseInt(btn.dataset.time, 10);
+        syncControlUI();
+        updateStatus();
+      });
+    });
 
-    document.getElementById('bAutoOrbit').onclick = () => {
+    // 自動公転ボタン
+    document.getElementById('bAutoOrbit').addEventListener('click', () => {
       isAutoOrbit = !isAutoOrbit;
-      renderControls();
-    };
+      if (isAutoOrbit) targetMoonAngle = null;
+      syncControlUI();
+    });
 
-    document.getElementById('bSolar').onclick = () => {
-      moonAngle = 0;
+    // 日食モード
+    document.getElementById('bSolar').addEventListener('click', () => {
+      setPhaseSmooth(0);
       observerTime = 12;
       eclipseMode = 'solar';
-      isAutoOrbit = false;
-      renderControls();
+      syncControlUI();
       updateStatus();
-    };
+    });
 
-    document.getElementById('bLunar').onclick = () => {
-      moonAngle = 180;
+    // 月食モード
+    document.getElementById('bLunar').addEventListener('click', () => {
+      setPhaseSmooth(180);
       observerTime = 0;
       eclipseMode = 'lunar';
-      isAutoOrbit = false;
-      renderControls();
+      syncControlUI();
       updateStatus();
-    };
+    });
 
-    document.getElementById('bResetMoon').onclick = resetLab;
+    // リセット
+    document.getElementById('bResetMoon').addEventListener('click', resetLab);
+
+    syncControlUI();
   }
 
-  function setPhase(deg) {
-    moonAngle = deg;
+  // UIの表示状態（スライダー値・ボタン色）だけを軽量更新
+  function syncControlUI() {
+    const curAngle = ((Math.round(moonAngle) % 360) + 360) % 360;
+    const activeDeg = targetMoonAngle !== null ? targetMoonAngle : curAngle;
+
+    const mRange = document.getElementById('mRange');
+    const mDegVal = document.getElementById('mDegVal');
+    if (mRange && document.activeElement !== mRange) {
+      mRange.value = curAngle;
+    }
+    if (mDegVal) {
+      mDegVal.textContent = `${curAngle}°`;
+    }
+
+    // 月相ボタンのハイライト更新
+    document.querySelectorAll('#phaseBtns button').forEach((btn) => {
+      const d = parseInt(btn.dataset.deg, 10);
+      const isSelected = (d === activeDeg);
+      btn.classList.toggle('secondary', !isSelected);
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+
+      if (isSelected) {
+        if (d === 90 || d === 270) {
+          btn.style.background = '#0d9488';
+          btn.style.borderColor = '#0d9488';
+        } else if (d === 180) {
+          btn.style.background = '#eab308';
+          btn.style.borderColor = '#eab308';
+          btn.style.color = '#000';
+        }
+      }
+    });
+
+    // 観測時刻ボタンのハイライト更新
+    document.querySelectorAll('#timeBtns button').forEach((btn) => {
+      const t = parseInt(btn.dataset.time, 10);
+      const isSelected = (t === observerTime);
+      btn.classList.toggle('secondary', !isSelected);
+      btn.style.background = '';
+      btn.style.borderColor = '';
+
+      if (isSelected) {
+        if (t === 18) { btn.style.background = '#ea580c'; btn.style.borderColor = '#ea580c'; }
+        if (t === 0)  { btn.style.background = '#1e1b4b'; btn.style.borderColor = '#818cf8'; }
+        if (t === 6)  { btn.style.background = '#0284c7'; btn.style.borderColor = '#0284c7'; }
+      }
+    });
+
+    // 自動公転・日食・月食ボタン更新
+    const bAuto = document.getElementById('bAutoOrbit');
+    bAuto.classList.toggle('secondary', isAutoOrbit);
+    bAuto.style.background = !isAutoOrbit ? '#10b981' : '';
+    bAuto.style.borderColor = !isAutoOrbit ? '#10b981' : '';
+    bAuto.textContent = isAutoOrbit ? '公転停止 ⏸️' : '公転アニメーション再生 ▶️';
+
+    const bSolar = document.getElementById('bSolar');
+    bSolar.classList.toggle('secondary', eclipseMode !== 'solar');
+    bSolar.style.background = eclipseMode === 'solar' ? '#ef4444' : '';
+    bSolar.style.borderColor = eclipseMode === 'solar' ? '#ef4444' : '';
+
+    const bLunar = document.getElementById('bLunar');
+    bLunar.classList.toggle('secondary', eclipseMode !== 'lunar');
+    bLunar.style.background = eclipseMode === 'lunar' ? '#b91c1c' : '';
+    bLunar.style.borderColor = eclipseMode === 'lunar' ? '#b91c1c' : '';
+  }
+
+  // 目標角度へスムーズに移動させる
+  function setPhaseSmooth(deg) {
+    targetMoonAngle = ((deg % 360) + 360) % 360;
+    isAutoOrbit = false;
     eclipseMode = 'none';
-    const rng = document.getElementById('mRange');
-    const val = document.getElementById('mDegVal');
-    if (rng) rng.value = Math.round(deg);
-    if (val) val.textContent = `${Math.round(deg)}°`;
-    renderControls();
-    updateStatus();
+    syncControlUI();
   }
 
   function resetLab() {
-    moonAngle = 90;
+    setPhaseSmooth(90);
     observerTime = 18;
-    isAutoOrbit = false;
-    eclipseMode = 'none';
-    renderControls();
+    syncControlUI();
     updateStatus();
   }
 
-  // 月情報と方角計算
+  // ==========================================
+  // 月の形・方角判定ロジック
+  // ==========================================
   function getMoonInfo() {
-    const deg = (moonAngle % 360 + 360) % 360;
+    const deg = ((moonAngle % 360) + 360) % 360;
     let name = "月";
     let desc = "";
 
-    if (deg >= 350 || deg <= 10) {
-      name = "新月（朔・さく）";
-      desc = "太陽と同じ方向にあり、地球に影の面を向けているため肉眼では見えません。";
-    } else if (deg > 10 && deg < 80) {
-      name = "三日月（みかづき）";
-      desc = "西の空に夕方、右側が細く光る弓状の月が見えます。すぐに西へ沈みます。";
-    } else if (deg >= 80 && deg <= 100) {
+    if (deg >= 345 || deg <= 15) {
+      name = "新月（朔）";
+      desc = "太陽と同じ方向にあり、影の面を地球に向けているため肉眼では見えません。";
+    } else if (deg > 15 && deg < 75) {
+      name = "三日月";
+      desc = "夕方に西の空に見え、右側が細く光る弓状の月です。日没後まもなく沈みます。";
+    } else if (deg >= 75 && deg <= 105) {
       name = "上弦の月（半月）";
-      desc = "夕方に南中し、右半分が輝く半月です。夜中の12時に西の地平線へ沈みます。";
-    } else if (deg > 100 && deg < 170) {
+      desc = "夕方に南中し、右半分が輝く半月です。真夜中（0時）に西の地平線へ沈みます。";
+    } else if (deg > 105 && deg < 165) {
       name = "上弦〜満月（太った月）";
-      desc = "夕方南東の空から昇り、夜遅くまで空を明るく照らします。";
-    } else if (deg >= 170 && deg <= 190) {
-      name = "満月（望・ぼう）";
-      desc = "太陽の真反対に位置し、全面が太陽光を反射して輝きます。夕方東から昇り、夜中南中し、明け方西に沈みます。";
-    } else if (deg > 190 && deg < 260) {
-      name = "満月〜下弦";
-      desc = "夜遅く東の空から昇り、午前中の青空にも白く残ります。";
-    } else if (deg >= 260 && deg <= 280) {
+      desc = "夕方、東〜南東の空から昇り、夜遅くまで空を明るく照らします。";
+    } else if (deg >= 165 && deg <= 195) {
+      name = "満月（望）";
+      desc = "太陽の真反対に位置し、全面が輝きます。夕方東から昇り、真夜中南中し、明け方西に沈みます。";
+    } else if (deg > 195 && deg < 255) {
+      name = "満月〜下弦（太った月）";
+      desc = "夜遅く東の空から昇り、午前中の西の青空にも白く残ります。";
+    } else if (deg >= 255 && deg <= 285) {
       name = "下弦の月（半月）";
-      desc = "夜中の12時に東から昇り、明け方に南中します。左半分が光る半月です。";
+      desc = "真夜中に東から昇り、明け方に南中します。左半分が光る半月です。";
     } else {
       name = "有明月（逆三日月）";
-      desc = "明け方の東の空に、左側が細く光って昇る月です。まもなく夜明けを迎えます。";
+      desc = "明け方の東の空に左側が細く光って昇る月です。まもなく夜明けを迎えます。";
     }
 
     const obsAngle = ((observerTime - 12) / 24) * 360;
-    let relAngle = (deg - obsAngle);
-    while (relAngle > 180) relAngle -= 360;
-    while (relAngle < -180) relAngle += 360;
+    let diff = deg - obsAngle;
+    while (diff > 180) diff -= 360;
+    while (diff < -180) diff += 360;
 
     let visibility = "見えない（地平線の下）";
-    if (relAngle >= -90 && relAngle <= 90) {
-      if (relAngle >= -90 && relAngle < -25) visibility = "東の空（昇ってきた）";
-      else if (relAngle >= -25 && relAngle <= 25) visibility = "南の空（南中！）";
-      else visibility = "西の空（沈みかけている）";
+    if (diff >= -90 && diff <= 90) {
+      if (diff < -20) {
+        visibility = "西の空（沈みかけている）";
+      } else if (diff > 20) {
+        visibility = "東の空（昇ってきた）";
+      } else {
+        visibility = "南の空（南中！）";
+      }
     }
 
-    return { name, desc, visibility, deg, relAngle };
+    return { name, desc, visibility, deg, relAngle: diff };
   }
 
   function updateStatus() {
@@ -11581,36 +11656,54 @@ function initC3Moon(canvas) {
     setStatus(`【${info.name}】現在時刻『${timeLabel}』➔ 観測結果：【 ${info.visibility} 】！${info.desc}`);
   }
 
-  renderControls();
+  initControls();
   updateStatus();
 
+  // ==========================================
+  // メイン描画ループ
+  // ==========================================
   function render() {
-    tick += 0.03;
     const w = canvas.width, h = canvas.height;
     ctx.fillStyle = "#030712";
     ctx.fillRect(0, 0, w, h);
 
+    // 1. 自動公転アニメーション
     if (isAutoOrbit) {
-      moonAngle = (moonAngle + 0.35) % 360;
-      const rng = document.getElementById('mRange');
-      const val = document.getElementById('mDegVal');
-      if (rng) rng.value = Math.round(moonAngle);
-      if (val) val.textContent = `${Math.round(moonAngle)}°`;
-      if (Math.random() < 0.05) updateStatus();
+      moonAngle = (moonAngle + 0.4) % 360;
+      syncControlUI();
+      if (Math.random() < 0.08) updateStatus();
+    }
+
+    // 2. ボタンクリック時のスムーズ移動（イージング処理）
+    if (targetMoonAngle !== null) {
+      // 最短の回転方向（-180° 〜 +180°）を計算
+      let diff = ((targetMoonAngle - moonAngle + 540) % 360) - 180;
+
+      if (Math.abs(diff) < 0.3) {
+        // 目標角度に到達したらピタッと止める
+        moonAngle = targetMoonAngle;
+        targetMoonAngle = null;
+        syncControlUI();
+        updateStatus();
+      } else {
+        // 差分の12%ずつ近づける（減速しながら滑らかに移動）
+        moonAngle = (moonAngle + diff * 0.12 + 360) % 360;
+        syncControlUI();
+        updateStatus();
+      }
     }
 
     const halfW = (w - 30) / 2;
-
-    // 1. 左画面：宇宙からの俯瞰図
     drawCosmicView(15, 15, halfW, h - 30);
-
-    // 2. 右画面：地球から見上げた空の実景ビュー
     drawEarthSkyView(15 + halfW + 10, 15, halfW, h - 30);
 
     animId = requestAnimationFrame(render);
   }
   render();
 
+  // ----------------------------------------------------
+  // 左画面：宇宙からの俯瞰図
+  // ----------------------------------------------------
   function drawCosmicView(bx, by, bw, bh) {
     ctx.fillStyle = "#090d16";
     ctx.fillRect(bx, by, bw, bh);
@@ -11627,7 +11720,6 @@ function initC3Moon(canvas) {
     const cy = by + bh / 2 + 10;
     const orbitR = Math.min(bw * 0.35, bh * 0.35);
 
-    // 太陽光線（右側から照射）
     const sunColor = eclipseMode === 'solar' ? "rgba(239, 68, 68, 0.4)" : "rgba(250, 204, 21, 0.35)";
     ctx.strokeStyle = sunColor;
     ctx.lineWidth = 1.5;
@@ -11644,7 +11736,6 @@ function initC3Moon(canvas) {
     ctx.textAlign = "right";
     ctx.fillText("太陽光 ⬅", bx + bw - 10, cy - 95);
 
-    // 公転軌道
     ctx.strokeStyle = "rgba(100, 116, 139, 0.45)";
     ctx.lineWidth = 1.2;
     ctx.setLineDash([3, 3]);
@@ -11653,10 +11744,9 @@ function initC3Moon(canvas) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    drawOrbitArrow(cx, cy, orbitR, Math.PI * 0.25);
-    drawOrbitArrow(cx, cy, orbitR, Math.PI * 1.25);
+    drawOrbitArrow(cx, cy, orbitR, -Math.PI * 0.25);
+    drawOrbitArrow(cx, cy, orbitR, -Math.PI * 1.25);
 
-    // 地球
     const earthR = 24;
     ctx.save();
     ctx.beginPath();
@@ -11682,10 +11772,9 @@ function initC3Moon(canvas) {
 
     drawObserverOnEarth(cx, cy, earthR);
 
-    // 月の公転位置
     const rad = (moonAngle * Math.PI) / 180;
-    const mx = cx + Math.cos(-rad) * orbitR;
-    const my = cy + Math.sin(-rad) * orbitR;
+    const mx = cx + Math.cos(rad) * orbitR;
+    const my = cy - Math.sin(rad) * orbitR;
     const moonR = 12;
 
     if (eclipseMode === 'lunar') {
@@ -11730,9 +11819,9 @@ function initC3Moon(canvas) {
   }
 
   function drawObserverOnEarth(cx, cy, r) {
-    const timeAngle = ((observerTime - 12) / 24) * Math.PI * 2;
-    const ox = cx + Math.cos(-timeAngle) * (r + 4);
-    const oy = cy + Math.sin(-timeAngle) * (r + 4);
+    const timeRad = (((observerTime - 12) / 24) * 360 * Math.PI) / 180;
+    const ox = cx + Math.cos(timeRad) * (r + 4);
+    const oy = cy - Math.sin(timeRad) * (r + 4);
 
     ctx.fillStyle = "#f43f5e";
     ctx.beginPath();
@@ -11744,26 +11833,27 @@ function initC3Moon(canvas) {
 
     ctx.save();
     ctx.translate(ox, oy);
-    ctx.rotate(-timeAngle + Math.PI / 2);
+    ctx.rotate(-timeRad);
+
     ctx.strokeStyle = "rgba(74, 222, 128, 0.7)";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(-18, 0); ctx.lineTo(18, 0);
+    ctx.moveTo(0, -18); ctx.lineTo(0, 18);
     ctx.stroke();
 
     ctx.fillStyle = "#4ade80";
     ctx.font = "bold 8px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("南", 0, -8);
-    ctx.fillText("東", -18, 10);
-    ctx.fillText("西", 18, 10);
+    ctx.fillText("南", 12, 3);
+    ctx.fillText("東", 0, -20);
+    ctx.fillText("西", 0, 25);
     ctx.restore();
   }
 
   function drawOrbitArrow(cx, cy, r, angle) {
     const ax = cx + Math.cos(angle) * r;
     const ay = cy + Math.sin(angle) * r;
-    const tanAngle = angle + Math.PI / 2;
+    const tanAngle = angle - Math.PI / 2;
     ctx.fillStyle = "#94a3b8";
     ctx.beginPath();
     ctx.moveTo(ax, ay);
@@ -11772,6 +11862,9 @@ function initC3Moon(canvas) {
     ctx.fill();
   }
 
+  // ----------------------------------------------------
+  // 右画面：地球から見上げた実際の月
+  // ----------------------------------------------------
   function drawEarthSkyView(bx, by, bw, bh) {
     ctx.fillStyle = "#020617";
     ctx.fillRect(bx, by, bw, bh);
@@ -11797,7 +11890,6 @@ function initC3Moon(canvas) {
       ctx.fillRect(sx, sy, 1.2, 1.2);
     }
 
-    // 満ち欠けの数学的描画
     drawPhaseMoon(mcx, mcy, mr, info.deg);
 
     ctx.fillStyle = "#facc15";
@@ -11808,11 +11900,11 @@ function initC3Moon(canvas) {
     drawObserverNavBoard(bx + 10, by + 168, bw - 20, bh - 178, info);
   }
 
-  // 地球から見た満ち欠け描画（凸月・三日月の数学的完全修正版）
+ // 地球から見た満ち欠けの描画（反転バグ完全解消版）
   function drawPhaseMoon(cx, cy, r, deg) {
     ctx.save();
 
-    // 影のベース（全体）
+    // 1. 月全体のベース（影側）
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = "#0f172a";
@@ -11821,44 +11913,62 @@ function initC3Moon(canvas) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    const normDeg = (deg % 360 + 360) % 360;
+    const normDeg = ((deg % 360) + 360) % 360;
     const brightColor = eclipseMode === 'lunar' ? "#b91c1c" : (eclipseMode === 'solar' ? "#0f172a" : "#fef08a");
     ctx.fillStyle = brightColor;
 
-    // k: -1.0(新月) 〜 0.0(半月) 〜 1.0(満月)
-    const k = -Math.cos((normDeg * Math.PI) / 180);
+    // 新月(0°) または 日食
+    if (normDeg === 0 || eclipseMode === 'solar') {
+      ctx.restore();
+      return;
+    }
+
+    // 満月(180°)
+    if (normDeg === 180) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    const cosVal = Math.cos((normDeg * Math.PI) / 180);
+    const absW = Math.abs(cosVal) * r;
+
+    ctx.beginPath();
 
     if (normDeg > 0 && normDeg < 180) {
-      // 0〜180°：右側が光る（三日月・上弦・上弦〜満月）
-      if (k >= 0) {
-        // 凸月（90°〜180°: 半分以上光る）
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false); // 右半円
-        ctx.ellipse(cx, cy, k * r, r, 0, Math.PI / 2, -Math.PI / 2, true); // 左へふくらむ
-        ctx.fill();
+      // ■ 0°〜180°: 右半分が基本光る（三日月・上弦・凸月）
+      // 12時 → 6時 へ右半円を描く
+      ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false);
+
+      if (normDeg < 90) {
+        // 【三日月 (0°〜90°)】
+        // 境界線を右側へくぼませて「細い三日月」にする (true: 反時計回り)
+        ctx.ellipse(cx, cy, absW, r, 0, Math.PI / 2, -Math.PI / 2, true);
       } else {
-        // 三日月（0°〜90°: 半分未満光る）
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, -Math.PI / 2, Math.PI / 2, false); // 右半円
-        ctx.ellipse(cx, cy, Math.abs(k) * r, r, 0, Math.PI / 2, -Math.PI / 2, false); // 右へ凹む
-        ctx.fill();
+        // 【上弦〜満月 (90°〜180°)】
+        // 境界線を左側へ膨らませて「太った凸月」にする (false: 時計回り)
+        ctx.ellipse(cx, cy, absW, r, 0, Math.PI / 2, -Math.PI / 2, false);
       }
-    } else if (normDeg >= 180 && normDeg < 360) {
-      // 180〜360°：左側が光る（満月〜下弦・下弦・有明月）
-      if (k >= 0) {
-        // 凸月（180°〜270°: 半分以上光る）
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false); // 左半円
-        ctx.ellipse(cx, cy, k * r, r, 0, -Math.PI / 2, Math.PI / 2, true); // 右へふくらむ
-        ctx.fill();
+    } else {
+      // ■ 180°〜360°: 左半分が基本光る（凸月・下弦・有明月）
+      // 6時 → 12時 へ左半円を描く
+      ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false);
+
+      if (normDeg < 270) {
+        // 【満月〜下弦 (180°〜270°)】
+        // 境界線を右側へ膨らませて「太った凸月」にする (false: 時計回り)
+        ctx.ellipse(cx, cy, absW, r, 0, -Math.PI / 2, Math.PI / 2, false);
       } else {
-        // 有明月（270°〜360°: 半分未満光る）
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, Math.PI / 2, -Math.PI / 2, false); // 左半円
-        ctx.ellipse(cx, cy, Math.abs(k) * r, r, 0, -Math.PI / 2, Math.PI / 2, false); // 左へ凹む
-        ctx.fill();
+        // 【有明月 (270°〜360°)】
+        // 境界線を左側へくぼませて「細い逆三日月」にする (true: 反時計回り)
+        ctx.ellipse(cx, cy, absW, r, 0, -Math.PI / 2, Math.PI / 2, true);
       }
     }
+
+    ctx.closePath();
+    ctx.fill();
 
     if (eclipseMode === 'lunar') {
       ctx.fillStyle = "rgba(185, 28, 28, 0.6)";
